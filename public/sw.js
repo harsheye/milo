@@ -1,4 +1,4 @@
-const CACHE = "vehiclelog-pro-v9";
+const CACHE = "vehiclelog-pro-v14";
 const CORE = ["/", "/index.html", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

@@ -4,9 +4,9 @@ import {
   CalendarDays, Car, CheckCircle2, ChevronDown, CircleDollarSign, Clock3,
   Download, Droplets, Fuel, Gauge, Grid2X2, LayoutDashboard, MapPin, Menu,
   Moon, MoreHorizontal, Plus, ReceiptText, Search, Settings, ShieldCheck,
-  Sparkles, Sun, TrendingUp, Wrench, X, Zap,
+  Sparkles, Sun, Trash2, TrendingUp, Wrench, X, Zap,
 } from "lucide-react";
-import { getFuelEntries, saveEntry } from "./db";
+import { deleteEntry, getEntries, getFuelEntries, saveEntry, updateEntry } from "./db";
 import { fetchDailyFuelPrice } from "./fuelPrice";
 import { calculateRefill } from "./calculations";
 
@@ -22,6 +22,7 @@ const nav = [
 ];
 
 const flatData = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const pages = {
   Vehicles: ["Your garage", "Manage profiles, odometer history and lifetime ownership for every vehicle."],
@@ -31,6 +32,7 @@ const pages = {
   Expenses: ["All expenses", "See every vehicle-related cost in one tidy ownership ledger."],
   Analytics: ["Performance insights", "Understand fuel, distance and spending trends across your garage."],
   Schedule: ["Travel schedule", "Plan recurring journeys, renewals and service obligations."],
+  Settings: ["Settings", "Tune the experience to match your vehicle life."],
 };
 
 function money(v) { return new Intl.NumberFormat("en-IN").format(v); }
@@ -60,7 +62,7 @@ function Donut({ empty = false }) {
   </svg>;
 }
 
-function Modal({ close, setActivities, vehicle, fuelEntries, onFuelSaved, onVehicleUpdate }) {
+function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVehicleUpdate, initialType = null }) {
   const [type, setType] = useState(null);
   const [saving, setSaving] = useState(false);
   const [amount, setAmount] = useState("");
@@ -98,12 +100,13 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onFuelSaved, onVehi
       data.mileage = refill.mileage.toFixed(2);
       data.priceSource = priceStatus.startsWith("Live") || priceStatus.startsWith("Saved daily") ? "fuel.indianapi.in" : "manual";
     }
-    try { await saveEntry(type, data); } catch { localStorage.setItem("vehiclelog-last-entry", JSON.stringify({ type, ...data })); }
-    if (type === "fuel") onFuelSaved(data);
+    let id;
+    try { id = await saveEntry(type, data); } catch { localStorage.setItem("vehiclelog-last-entry", JSON.stringify({ type, ...data })); }
     const [title, Icon] = labels[type];
-    setActivities((current) => [{ icon: Icon, tone: type === "fuel" ? "orange" : "green", title: `${title} added`, meta: `${data.vehicle} · ${data.note || "New record"}`, amount: data.amount ? `₹${data.amount}` : "Saved", time: "Just now" }, ...current]);
+    onRecordSaved(type, { ...data, id: id || Date.now(), createdAt: new Date().toISOString(), activity: { icon: Icon, tone: type === "fuel" ? "orange" : "green", title: `${title} added`, meta: `${data.vehicle} · ${data.note || "New record"}`, amount: data.amount ? `₹${data.amount}` : "Saved", time: "Just now" } });
     setSaving(false); close();
   }
+  useEffect(() => { if (initialType) setType(initialType); }, [initialType]);
   return <div className="modal-wrap" role="presentation" onMouseDown={close}>
     <section className="modal" role="dialog" aria-modal="true" aria-label="Quick add" onMouseDown={(e) => e.stopPropagation()}>
       <header><div><span className="eyebrow">Quick add</span><h2>Log a new record</h2></div><IconButton label="Close" onClick={close}><X size={18}/></IconButton></header>
@@ -114,7 +117,7 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onFuelSaved, onVehi
         <div className="form-grid"><label>Date<input name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></label><label>Vehicle<input name="vehicle" value={vehicle.name} readOnly /></label></div>
         <label>Current meter reading (km)<input name="odometer" type="number" min={lastFuel?.odometer || vehicle.initialOdometer} placeholder={String(lastFuel?.odometer || vehicle.initialOdometer)} required /><small className="field-help">Last recorded meter: {Number(lastFuel?.odometer || vehicle.initialOdometer).toLocaleString("en-IN")} km</small></label>
         {type === "fuel" && <><label>Fuel-price city<input name="fuelCity" placeholder="Bangalore" value={fuelCity} onChange={(e) => setFuelCity(e.target.value)} required /><small className="field-help">Matched against the IndianAPI city list. Saved to your vehicle after this refill.</small></label><div className="form-grid"><label>Amount paid (INR)<input name="amount" type="number" min="0" step="0.01" placeholder="2500" value={amount} onChange={(e) => setAmount(e.target.value)} required /></label><label>{vehicle.fuel} price (INR/L)<input name="pricePerLiter" type="number" min="0" step="0.01" placeholder="Fetching today's rate..." value={price} onChange={(e) => setPrice(e.target.value)} readOnly={autoPrice} required /><small className="field-help">{autoPrice ? "Filled automatically from IndianAPI." : "Manual entry is available when the API cannot resolve your city."}</small></label></div><div className="fuel-calc"><Fuel size={16}/><div><b>{liters || "0.00"} liters</b><small>{priceStatus}</small></div></div></>}
-        {type === "trips" && <div className="form-grid"><label>Distance (km)<input name="distance" placeholder="18.4" required /></label><label>Destination<input name="destination" placeholder="Indiranagar" required /></label></div>}
+        {type === "trips" && <div className="form-grid"><label>Distance (km)<input name="distance" placeholder="18.4" required /></label><label>Destination<input name="destination" placeholder="Indiranagar" required /></label><label>Category<select name="category"><option>Work</option><option>Family</option><option>Business</option><option>Personal</option></select></label></div>}
         {type === "service" && <label>Service type<input name="serviceType" placeholder="Oil and filter change" required /></label>}
         {type === "expenses" && <div className="form-grid"><label>Category<select name="category"><option>Parking</option><option>Toll</option><option>Accessories</option><option>Miscellaneous</option></select></label><label>Amount<input name="amount" placeholder="120" required /></label></div>}
         <label>Note<input name="note" placeholder="Add a short note" /></label>
@@ -139,6 +142,31 @@ function VehicleModal({ close, addVehicle }) {
         <div className="form-grid"><label>Vehicle type<select name="type"><option>Car</option><option>Motorcycle</option><option>Scooter</option><option>Truck</option></select></label><label>Fuel type<select name="fuel"><option>Petrol</option><option>Diesel</option><option>CNG</option><option>LPG</option></select></label></div>
         <label>Home city<input name="city" placeholder="Bangalore" required /><small className="field-help">Used to select your daily fuel rate. The API is contacted only when the fuel-log form opens, at most once per day.</small></label>
         <footer><button type="button" className="btn ghost" onClick={close}>Cancel</button><button className="btn primary"><Plus size={17}/>Add vehicle</button></footer>
+      </form>
+    </section>
+  </div>;
+}
+
+function ScheduleModal({ close, onScheduleSaved }) {
+  const [days, setDays] = useState(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+  async function submit(event) {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(event.currentTarget));
+    data.weekdays = days.join(",");
+    const id = await saveEntry("schedules", data);
+    onScheduleSaved({ ...data, id, createdAt: new Date().toISOString() });
+    close();
+  }
+  return <div className="modal-wrap" role="presentation" onMouseDown={close}>
+    <section className="modal" role="dialog" aria-modal="true" aria-label="Create schedule" onMouseDown={(e) => e.stopPropagation()}>
+      <header><div><span className="eyebrow">Schedule</span><h2>Create recurring travel</h2></div><IconButton label="Close" onClick={close}><X size={18}/></IconButton></header>
+      <form onSubmit={submit}>
+        <label>Schedule name<input name="name" defaultValue="Office commute" required autoFocus /></label>
+        <div className="form-grid"><label>Destination<input name="destination" defaultValue="Work" required /></label><label>Distance (km)<input name="distance" type="number" defaultValue="18" /></label></div>
+        <div className="form-grid"><label>Repeat<select name="repeat"><option>Daily</option><option>Weekly</option><option>Monthly</option><option>Yearly</option></select></label><label>Start date<input name="startDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} /></label></div>
+        <div className="weekday-picker" aria-label="Choose weekdays">{weekdays.map((day) => <button key={day} type="button" className={days.includes(day) ? "active" : ""} onClick={() => setDays((currentDays) => currentDays.includes(day) ? currentDays.filter((d) => d !== day) : [...currentDays, day])}>{day}</button>)}</div>
+        <label>Notes<input name="notes" placeholder="Optional reminder notes" /></label>
+        <footer><button type="button" className="btn ghost" onClick={close}>Cancel</button><button className="btn primary"><Plus size={17}/>Create schedule</button></footer>
       </form>
     </section>
   </div>;
@@ -236,6 +264,14 @@ function EmptyWidget({ text }) {
   return <div className="widget-empty"><Sparkles size={16}/><span>{text}</span></div>;
 }
 
+function buildActivities(records) {
+  const fuel = records.fuel.map((r) => ({ icon: Fuel, tone: "orange", title: "Fuel refill", meta: `${r.vehicle} · ${r.liters || "0.00"} L · ${r.mileage || "--"} km/L`, amount: `₹${money(Number(r.amount || 0))}`, time: r.date }));
+  const trips = records.trips.map((r) => ({ icon: MapPin, tone: "blue", title: "Trip", meta: `${r.vehicle} · ${r.destination || "Destination"}`, amount: `${r.distance || 0} km`, time: r.date }));
+  const services = records.maintenance.map((r) => ({ icon: Wrench, tone: "green", title: r.serviceType || "Service", meta: `${r.vehicle} · ${r.note || "Service record"}`, amount: r.cost ? `₹${money(Number(r.cost))}` : "Saved", time: r.date }));
+  const expenses = records.expenses.map((r) => ({ icon: ReceiptText, tone: "purple", title: r.category || "Expense", meta: `${r.vehicle} · ${r.note || "Expense record"}`, amount: r.amount ? `₹${money(Number(r.amount))}` : "Saved", time: r.date }));
+  return [...fuel, ...trips, ...services, ...expenses].slice(-6).reverse();
+}
+
 function Metric({ title, value, detail, trend, icon: Icon, chart, good }) {
   return <article className="metric"><header><div className="metric-icon"><Icon size={18}/></div><span>{title}</span><MoreHorizontal size={17}/></header><div><strong>{value}</strong><small>{detail}</small></div><footer><span className={good ? "positive" : ""}>{good ? <ArrowDownRight size={14}/> : <ArrowUpRight size={14}/>} {trend}</span><Sparkline data={chart} color={good ? "#3c8174" : "#e66b2e"} fill={good ? "rgba(60,129,116,.06)" : "rgba(230,107,46,.06)"}/></footer></article>;
 }
@@ -248,14 +284,95 @@ function LineChart() {
   return <div className="line-chart"><div className="grid-lines"><i/><i/><i/><i/></div><span className="axis a1">16</span><span className="axis a2">14</span><span className="axis a3">12</span><Sparkline data={flatData} height={142} color="#e66b2e" fill="rgba(230,107,46,.07)"/><div className="months">{["Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar","Apr","May","Jun"].map(m => <span key={m}>{m}</span>)}</div></div>;
 }
 
-function SecondaryPage({ active, setModal }) {
+function recordCards(active, records) {
+  if (active === "Fuel log") return records.fuel.map((r) => ({ record: r, fields: [r.date, `₹${money(Number(r.amount || 0))}`, `${r.liters || "0.00"} L`, `${r.mileage || "--"} km/L`] }));
+  if (active === "Trips") return records.trips.map((r) => ({ record: r, fields: [r.destination || "Trip", r.date, `${r.distance || "0"} km`, r.category || "Trip"] }));
+  if (active === "Maintenance") return records.maintenance.map((r) => ({ record: r, fields: [r.serviceType || "Service", r.date, `₹${money(Number(r.cost || 0))}`, r.odometer ? `${r.odometer} km` : ""] }));
+  if (active === "Expenses") return records.expenses.map((r) => ({ record: r, fields: [r.category || "Expense", r.date, `₹${money(Number(r.amount || 0))}`, r.note || ""] }));
+  if (active === "Schedule") return records.schedules.map((r) => ({ record: r, fields: [r.name || "Schedule", r.destination || "Destination", r.repeat || "Repeat", r.weekdays || ""] }));
+  return [];
+}
+
+function vehicleCards(vehicle, stats) {
+  if (!vehicle) return [];
+  return [{
+    record: vehicle,
+    fields: [
+      vehicle.name || "Vehicle",
+      vehicle.registration || "Registration pending",
+      `${Number(stats.currentOdometer || vehicle.initialOdometer || 0).toLocaleString("en-IN")} km`,
+      `${vehicle.fuel || "Fuel"} - ${vehicle.city || "City pending"}`,
+    ],
+  }];
+}
+
+function addTypeForPage(active) {
+  if (active === "Fuel log") return "fuel";
+  if (active === "Trips") return "trips";
+  if (active === "Maintenance") return "service";
+  if (active === "Expenses") return "expenses";
+  return true;
+}
+
+function tableForPage(active) {
+  if (active === "Fuel log") return "fuel";
+  if (active === "Trips") return "trips";
+  if (active === "Maintenance") return "maintenance";
+  if (active === "Expenses") return "expenses";
+  if (active === "Schedule") return "schedules";
+  return "";
+}
+
+function SettingsPage({ records, vehicle }) {
+  const totalLogs = records.fuel.length + records.trips.length + records.maintenance.length + records.expenses.length + records.schedules.length;
+  const configured = Boolean(import.meta.env.VITE_FUEL_API_BASE_URL && import.meta.env.VITE_FUEL_API_KEY);
+  const rows = [
+    ["Fuel price API", configured ? "Configured from environment" : "Add API base URL and key in .env", configured],
+    ["Local storage", "Records stay in this browser on this device", true],
+    ["Vehicle profile", vehicle ? `${vehicle.name} - ${vehicle.registration}` : "No vehicle profile", Boolean(vehicle)],
+    ["Saved logs", `${totalLogs} local record${totalLogs === 1 ? "" : "s"}`, totalLogs > 0],
+  ];
+  return <div className="settings-grid">
+    <article className="setting-card"><div><ShieldCheck size={18}/><span className="eyebrow">Privacy</span><h3>Local-first data</h3></div><p>Your vehicle, fuel, travel, expense, and schedule logs are stored locally in this browser. The fuel API is only called when you create a fuel refill.</p></article>
+    <article className="setting-card"><div><Fuel size={18}/><span className="eyebrow">Fuel</span><h3>Daily price fetch</h3></div><p>IndianAPI is configured through environment variables so the base URL and key can be replaced without touching the app code.</p></article>
+    <article className="setting-card wide">
+      <span className="eyebrow">System status</span>
+      {rows.map(([label, text, on]) => <div className="setting-row" key={label}><div><b>{label}</b><small>{text}</small></div><span className={`switch ${on ? "on" : ""}`}><i></i></span></div>)}
+    </article>
+  </div>;
+}
+
+function LogDetailModal({ active, record, close, onSave, onDelete }) {
+  const table = tableForPage(active);
+  const editableKeys = Object.keys(record).filter((key) => !["id", "createdAt", "updatedAt", "activity"].includes(key));
+  const deleteLabel = active === "Schedule" ? "Delete schedule" : "Delete log";
+  return <div className="modal-wrap" role="presentation" onMouseDown={close}>
+    <section className="modal" role="dialog" aria-modal="true" aria-label={`${active} details`} onMouseDown={(e) => e.stopPropagation()}>
+      <header><div><span className="eyebrow">{active}</span><h2>Edit log details</h2></div><IconButton label="Close" onClick={close}><X size={18}/></IconButton></header>
+      <form onSubmit={(event) => { event.preventDefault(); onSave(table, record.id, Object.fromEntries(new FormData(event.currentTarget))); close(); }}>
+        {editableKeys.map((key) => <label key={key}>{key.replace(/([A-Z])/g, " $1")}<input name={key} defaultValue={record[key]} /></label>)}
+        {active === "Trips" && <small className="field-help">Changing trip distance updates live odometer, driven distance, and mileage on the dashboard.</small>}
+        <footer><button type="button" className="btn danger" onClick={() => onDelete(table, record.id)}><Trash2 size={16}/>{deleteLabel}</button><button type="button" className="btn ghost" onClick={close}>Cancel</button><button className="btn primary"><CheckCircle2 size={17}/>Update log</button></footer>
+      </form>
+    </section>
+  </div>;
+}
+
+function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, stats }) {
   const [title, description] = pages[active] || ["Settings", "Tune the experience to match your vehicle life."];
-  const cards = [];
+  const cards = active === "Vehicles" ? vehicleCards(vehicle, stats) : recordCards(active, records);
+  const schedule = active === "Schedule";
+  const isSettings = active === "Settings";
+  const isVehicles = active === "Vehicles";
+  const canCreate = !isSettings && !isVehicles;
+  const canOpen = !isSettings && !isVehicles;
   return <section className="secondary-page">
-    <div className="secondary-hero"><div><span className="eyebrow">VehicleLog Pro</span><h2>{title}</h2><p>{description}</p></div><button className="btn primary" onClick={() => setModal(true)}><Plus size={17}/>Add new</button></div>
-    <div className="secondary-toolbar"><label className="search"><Search size={17}/><input placeholder={`Search ${active.toLowerCase()}...`} /></label><button className="btn ghost"><Grid2X2 size={16}/>Filters</button><button className="btn ghost"><Download size={16}/>Export</button></div>
-    <div className="data-cards">{cards.map(([a,b,c,d]) => <article key={a}><div className="data-icon">{active === "Vehicles" ? <Car/> : <Activity/>}</div><div><h3>{a}</h3><p>{b}</p></div><footer><span>{c}</span><span>{d}</span><ArrowRight size={17}/></footer></article>)}</div>
-    <div className="empty-note"><Sparkles size={18}/><div><b>Offline and always available</b><p>Your records stay on this device. Add new entries and they will appear here instantly.</p></div></div>
+    <div className="secondary-hero"><div><span className="eyebrow">VehicleLog Pro</span><h2>{title}</h2><p>{description}</p></div>{canCreate && <button className="btn primary" onClick={() => setModal(schedule ? "schedule" : addTypeForPage(active))}><Plus size={17}/>{schedule ? "Create schedule" : "Add new"}</button>}</div>
+    {isSettings ? <SettingsPage records={records} vehicle={vehicle}/> : <>
+      <div className="secondary-toolbar"><label className="search"><Search size={17}/><input placeholder={`Search ${active.toLowerCase()}...`} /></label><button className="btn ghost"><Grid2X2 size={16}/>Filters</button><button className="btn ghost"><Download size={16}/>Export</button></div>
+      <div className="data-cards">{cards.map(({ record, fields: [a,b,c,d] }) => <article key={`${active}-${record.id || record.registration || record.name}`} role={canOpen ? "button" : "article"} tabIndex={canOpen ? "0" : undefined} aria-disabled={!canOpen} onClick={canOpen ? () => onOpenRecord(active, record) : undefined}><div className="data-icon">{active === "Schedule" ? <CalendarDays/> : active === "Vehicles" ? <Car/> : <Activity/>}</div><div><h3>{a}</h3><p>{b}</p></div><footer><span>{c}</span><span>{d}</span>{canOpen && <ArrowRight size={17}/>}</footer></article>)}</div>
+      {cards.length === 0 && <div className="empty-note"><Sparkles size={18}/><div><b>{schedule ? "No schedules yet" : "No records yet"}</b><p>{schedule ? "Create a recurring trip or reminder from this page." : "Your records stay on this device. Add new entries and they will appear here instantly."}</p></div>{schedule && <button className="btn primary" onClick={() => setModal("schedule")}><Plus size={16}/>Create schedule</button>}</div>}
+    </>}
   </section>;
 }
 
@@ -268,25 +385,60 @@ export default function App() {
   const [vehicle, setVehicle] = useState(() => JSON.parse(localStorage.getItem("vehiclelog-v6-vehicle") || "null"));
   const [vehicleModal, setVehicleModal] = useState(false);
   const [fuelEntries, setFuelEntries] = useState([]);
+  const [records, setRecords] = useState({ fuel: [], trips: [], maintenance: [], expenses: [], schedules: [] });
+  const [detail, setDetail] = useState(null);
   useEffect(() => { getFuelEntries().then(setFuelEntries); }, []);
+  useEffect(() => {
+    Promise.all([getEntries("fuel"), getEntries("trips"), getEntries("maintenance"), getEntries("expenses"), getEntries("schedules")]).then(([fuel, trips, maintenance, expenses, schedules]) => {
+      setRecords({ fuel, trips, maintenance, expenses, schedules });
+      setFuelEntries(fuel);
+    }).catch((error) => console.error("Unable to load local records", error));
+  }, []);
   const stats = useMemo(() => {
     const initial = Number(vehicle?.initialOdometer || 0);
-    const currentOdometer = Number(fuelEntries[fuelEntries.length - 1]?.odometer || initial);
+    const tripDistance = records.trips.reduce((sum, trip) => sum + Number(trip.distance || 0), 0);
+    const fuelDistance = Math.max(0, Number(fuelEntries[fuelEntries.length - 1]?.odometer || initial) - initial);
+    const distance = Math.max(fuelDistance, tripDistance);
+    const currentOdometer = initial + distance;
     const liters = fuelEntries.reduce((sum, entry) => sum + Number(entry.liters || 0), 0);
     const spend = fuelEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
-    const distance = Math.max(0, currentOdometer - initial);
     return { currentOdometer, liters, spend, distance, mileage: liters ? distance / liters : 0, fuelCount: fuelEntries.length };
-  }, [vehicle, fuelEntries]);
+  }, [vehicle, fuelEntries, records.trips]);
   function addVehicle(entry) {
     localStorage.setItem("vehiclelog-v6-vehicle", JSON.stringify(entry));
     setVehicle(entry);
     setVehicleModal(false);
   }
+  function addRecord(type, entry) {
+    const { activity, ...record } = entry;
+    const table = type === "service" ? "maintenance" : type;
+    setRecords((currentRecords) => ({ ...currentRecords, [table]: [...currentRecords[table], record] }));
+    if (type === "fuel") setFuelEntries((currentEntries) => [...currentEntries, record]);
+    if (activity) setActivities((currentActivities) => [activity, ...currentActivities]);
+  }
+  async function saveRecordUpdate(table, id, entry) {
+    await updateEntry(table, id, entry);
+    setRecords((currentRecords) => ({ ...currentRecords, [table]: currentRecords[table].map((record) => Number(record.id) === Number(id) ? { ...record, ...entry, id } : record) }));
+    if (table === "fuel") setFuelEntries((currentEntries) => currentEntries.map((record) => Number(record.id) === Number(id) ? { ...record, ...entry, id } : record));
+  }
+  async function deleteRecord(table, id) {
+    await deleteEntry(table, id);
+    setRecords((currentRecords) => ({ ...currentRecords, [table]: currentRecords[table].filter((record) => Number(record.id) !== Number(id)) }));
+    if (table === "fuel") setFuelEntries((currentEntries) => currentEntries.filter((record) => Number(record.id) !== Number(id)));
+    setDetail(null);
+  }
+  function addSchedule(entry) {
+    setRecords((currentRecords) => ({ ...currentRecords, schedules: [...currentRecords.schedules, entry] }));
+  }
   const current = useMemo(() => active, [active]);
+  const modalType = modal === true ? null : modal;
+  const allActivities = activities.length ? activities : buildActivities(records);
   return <div className={`app ${dark ? "dark" : ""}`}>
     <Sidebar active={current} setActive={setActive} open={menu} setOpen={setMenu} vehicle={vehicle}/>
-    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={activities} vehicle={vehicle} stats={stats}/> : <SecondaryPage active={current} setModal={setModal}/>}</div></main>
-    {modal && <Modal close={() => setModal(false)} setActivities={setActivities} vehicle={vehicle} fuelEntries={fuelEntries} onFuelSaved={(entry) => setFuelEntries((currentEntries) => [...currentEntries, entry])} onVehicleUpdate={addVehicle}/>}
+    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats}/> : <SecondaryPage active={current} setModal={setModal} records={records} vehicle={vehicle} stats={stats} onOpenRecord={(page, record) => setDetail({ page, record })}/>}</div></main>
+    {modal && modal !== "schedule" && <Modal close={() => setModal(false)} setActivities={setActivities} vehicle={vehicle} fuelEntries={fuelEntries} onRecordSaved={addRecord} onVehicleUpdate={addVehicle} initialType={modalType}/>}
+    {modal === "schedule" && <ScheduleModal close={() => setModal(false)} onScheduleSaved={addSchedule}/>}
+    {detail && <LogDetailModal active={detail.page} record={detail.record} close={() => setDetail(null)} onSave={saveRecordUpdate} onDelete={deleteRecord}/>}
     {vehicleModal && <VehicleModal close={() => setVehicleModal(false)} addVehicle={addVehicle}/>}
   </div>;
 }
