@@ -727,17 +727,26 @@ function recordCards(active, records) {
   return [];
 }
 
-function vehicleCards(vehicle, stats) {
-  if (!vehicle) return [];
-  return [{
-    record: vehicle,
-    fields: [
-      vehicle.name || "Vehicle",
-      vehicle.registration || "Registration pending",
-      `${Number(stats.currentOdometer || vehicle.initialOdometer || 0).toLocaleString("en-IN")} km`,
-      `${vehicle.fuel || "Fuel"} - ${vehicle.city || "City pending"}`,
-    ],
-  }];
+function vehicleCards(vehicles, allRecords, allFuelEntries) {
+  return vehicles.map((v) => {
+    const name = v.name;
+    const vehicleTrips = allRecords.trips.filter(r => r.vehicle === name);
+    const vehicleFuel = allFuelEntries.filter(r => r.vehicle === name);
+    const initial = Number(v.initialOdometer || 0);
+    const tripDistance = vehicleTrips.reduce((sum, trip) => sum + Number(trip.distance || 0), 0);
+    const fuelDistance = Math.max(0, Number(vehicleFuel[vehicleFuel.length - 1]?.odometer || initial) - initial);
+    const distance = Math.max(fuelDistance, tripDistance);
+    const currentOdometer = initial + distance;
+    return {
+      record: v,
+      fields: [
+        v.name || "Vehicle",
+        v.registration || "Registration pending",
+        `${currentOdometer.toLocaleString("en-IN")} km`,
+        `${v.fuel || "Fuel"} - ${v.city || "City pending"}`,
+      ],
+    };
+  });
 }
 
 function addTypeForPage(active) {
@@ -847,20 +856,20 @@ function LogDetailModal({ active, record, close, onSave, onDelete }) {
     <div className="modal-wrap" role="presentation" onMouseDown={close}>
       <section className="modal" role="dialog" aria-modal="true" aria-label={`${active} details`} onMouseDown={(e) => e.stopPropagation()}>
         <header><div><span className="eyebrow">{active}</span><h2>Edit log details</h2></div><IconButton label="Close" onClick={close}><X size={18}/></IconButton></header>
-        <form onSubmit={(event) => { event.preventDefault(); onSave(table, record.id, Object.fromEntries(new FormData(event.currentTarget))); close(); }}>
+        <form onSubmit={(event) => { event.preventDefault(); onSave(table, active === "Vehicles" ? record.name : record.id, Object.fromEntries(new FormData(event.currentTarget))); close(); }}>
           {editableKeys.map((key) => renderFieldInput(key))}
           {active === "Trips" && <small className="field-help">Changing trip distance updates live odometer, driven distance, and mileage on the dashboard.</small>}
-          <footer><button type="button" className="btn danger" onClick={() => onDelete(table, record.id)}><Trash2 size={16}/>{deleteLabel}</button><button type="button" className="btn ghost" onClick={close}>Cancel</button><button className="btn primary"><CheckCircle2 size={17}/>Update log</button></footer>
+          <footer><button type="button" className="btn danger" onClick={() => onDelete(table, active === "Vehicles" ? record.name : record.id)}><Trash2 size={16}/>{deleteLabel}</button><button type="button" className="btn ghost" onClick={close}>Cancel</button><button className="btn primary"><CheckCircle2 size={17}/>Update log</button></footer>
         </form>
       </section>
     </div>
   );
 }
 
-function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, stats, skippedSchedules, onOpenScheduleDetails }) {
+function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehicles, allRecords, allFuelEntries, stats, skippedSchedules, onOpenScheduleDetails }) {
   const [title, description] = pages[active] || ["Settings", "Tune the experience to match your vehicle life."];
   const [search, setSearch] = useState("");
-  const cards = active === "Vehicles" ? vehicleCards(vehicle, stats) : recordCards(active, records);
+  const cards = active === "Vehicles" ? vehicleCards(vehicles, allRecords, allFuelEntries) : recordCards(active, records);
   const schedule = active === "Schedule";
   const isSettings = active === "Settings";
   const isVehicles = active === "Vehicles";
@@ -1443,7 +1452,7 @@ export default function App() {
 
   return <div className={`app ${dark ? "dark" : ""}`}>
     <Sidebar active={current} setActive={setActive} open={menu} setOpen={setMenu} vehicle={vehicle} vehicles={vehicles} setVehicle={setVehicle} setVehicleModal={setVehicleModal}/>
-    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })}/>}</div></main>
+    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })}/>}</div></main>
     {modal && modal !== "schedule" && <Modal close={() => setModal(false)} setActivities={() => {}} vehicle={vehicle} fuelEntries={activeFuelEntries} onRecordSaved={addRecord} onVehicleUpdate={updateVehicle} initialType={modalType}/>}
     {modal === "schedule" && <ScheduleModal close={() => setModal(false)} onScheduleSaved={addSchedule} vehicle={vehicle}/>}
     {detail && <LogDetailModal active={detail.page} record={detail.record} close={() => setDetail(null)} onSave={saveRecordUpdate} onDelete={deleteRecord}/>}
