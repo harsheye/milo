@@ -4,11 +4,12 @@ import {
   CalendarDays, Car, CheckCircle2, ChevronDown, CircleDollarSign, Clock3,
   Download, Droplets, Fuel, Gauge, Grid2X2, LayoutDashboard, MapPin, Menu,
   Moon, MoreHorizontal, Plus, ReceiptText, Search, Settings, ShieldCheck,
-  Sparkles, Sun, Trash2, TrendingUp, Wrench, X, Zap,
+  Sparkles, Sun, Trash2, TrendingUp, Upload, Wrench, X, Zap,
 } from "lucide-react";
-import { deleteEntry, getEntries, getFuelEntries, saveEntry, updateEntry } from "./db";
+import { db, deleteEntry, getEntries, getFuelEntries, saveEntry, updateEntry } from "./db";
 import { fetchDailyFuelPrice } from "./fuelPrice";
 import { calculateRefill } from "./calculations";
+import { parseInputWithAI } from "./gemini";
 
 const nav = [
   ["Overview", LayoutDashboard],
@@ -278,7 +279,7 @@ function Donut({ fuel = 0, service = 0, travel = 0, other = 0 }) {
   </svg>;
 }
 
-function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVehicleUpdate, initialType = null }) {
+function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVehicleUpdate, initialType = null, onScheduleSaved }) {
   const [type, setType] = useState(null);
   const [saving, setSaving] = useState(false);
   const [amount, setAmount] = useState("");
@@ -286,7 +287,37 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
   const [fuelCity, setFuelCity] = useState(vehicle.city || "");
   const [priceStatus, setPriceStatus] = useState(vehicle.city ? "Fetching today's INR price..." : "Enter your city to fetch today's INR price.");
   const [autoPrice, setAutoPrice] = useState(false);
-  const labels = { fuel: ["Fuel refill", Fuel], trips: ["Trip", MapPin], service: ["Service", Wrench], expenses: ["Expense", ReceiptText] };
+  
+  // Controlled form states
+  const [odometer, setOdometer] = useState("");
+  const [distance, setDistance] = useState("");
+  const [destination, setDestination] = useState("");
+  const [categorySelect, setCategorySelect] = useState("");
+  const [serviceType, setServiceType] = useState("");
+  const [cost, setCost] = useState("");
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+
+  // Schedule specific states
+  const [scheduleName, setScheduleName] = useState("");
+  const [scheduleRepeat, setScheduleRepeat] = useState("Daily");
+  const [scheduleTime, setScheduleTime] = useState("18:00");
+  const [scheduleDays, setScheduleDays] = useState(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+  const [scheduleNotes, setScheduleNotes] = useState("");
+
+  // AI states
+  const [aiInput, setAiInput] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+
+  const labels = { 
+    fuel: ["Fuel refill", Fuel], 
+    trips: ["Trip", MapPin], 
+    service: ["Service", Wrench], 
+    expenses: ["Expense", ReceiptText],
+    schedule: ["Schedule", CalendarDays]
+  };
+
   const lastFuel = fuelEntries[fuelEntries.length - 1];
   const preview = calculateRefill({ amount, pricePerLiter: price, currentOdometer: 0, previousOdometer: 0 });
   const liters = amount && price ? preview.liters.toFixed(2) : "";
@@ -315,9 +346,69 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
     return () => clearTimeout(timer);
   }, [type, fuelCity, vehicle.fuel]);
 
+  const handleAiFill = async () => {
+    if (!aiInput.trim()) return;
+    setAiLoading(true);
+    setAiError("");
+    try {
+      const result = await parseInputWithAI(aiInput);
+      if (result && result.type) {
+        setType(result.type);
+        if (result.type === "fuel") {
+          if (result.data.amount) setAmount(String(result.data.amount));
+          if (result.data.pricePerLiter) setPrice(String(result.data.pricePerLiter));
+          if (result.data.fuelCity) setFuelCity(result.data.fuelCity);
+          if (result.data.note) setNote(result.data.note);
+        } else if (result.type === "trips") {
+          if (result.data.distance) setDistance(String(result.data.distance));
+          if (result.data.destination) setDestination(result.data.destination);
+          if (result.data.category) setCategorySelect(result.data.category);
+          if (result.data.note) setNote(result.data.note);
+        } else if (result.type === "service") {
+          if (result.data.serviceType) setServiceType(result.data.serviceType);
+          if (result.data.cost) setCost(String(result.data.cost));
+          if (result.data.note) setNote(result.data.note);
+        } else if (result.type === "expenses") {
+          if (result.data.category) setCategorySelect(result.data.category);
+          if (result.data.amount) setAmount(String(result.data.amount));
+          if (result.data.note) setNote(result.data.note);
+        } else if (result.type === "schedule") {
+          if (result.data.name) setScheduleName(result.data.name);
+          if (result.data.destination) setDestination(result.data.destination);
+          if (result.data.distance) setDistance(String(result.data.distance));
+          if (result.data.repeat) setScheduleRepeat(result.data.repeat);
+          if (result.data.completionTime) setScheduleTime(result.data.completionTime);
+          if (result.data.startDate) setDate(result.data.startDate);
+          if (result.data.notes) setScheduleNotes(result.data.notes);
+          if (result.data.weekdays) {
+            setScheduleDays(result.data.weekdays.split(",").map(d => d.trim()));
+          }
+        }
+      } else {
+        setAiError("AI could not classify the entry. Please try different wording.");
+      }
+    } catch (err) {
+      setAiError(err.message || "An error occurred during AI analysis.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   async function submit(e) {
     e.preventDefault(); setSaving(true);
     const data = Object.fromEntries(new FormData(e.currentTarget));
+    
+    if (type === "schedule") {
+      data.weekdays = scheduleDays.join(",");
+      data.vehicle = vehicle.name;
+      const id = await saveEntry("schedules", data);
+      if (onScheduleSaved) {
+        onScheduleSaved({ ...data, id, createdAt: new Date().toISOString() });
+      }
+      setSaving(false); close();
+      return;
+    }
+
     if (type === "fuel") {
       if (fuelCity.trim() && fuelCity.trim() !== vehicle.city) onVehicleUpdate({ ...vehicle, city: fuelCity.trim() });
       const refill = calculateRefill({ amount: data.amount, pricePerLiter: data.pricePerLiter, currentOdometer: data.odometer, previousOdometer: lastFuel?.odometer || vehicle.initialOdometer });
@@ -326,25 +417,55 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
       data.mileage = refill.mileage.toFixed(2);
       data.priceSource = priceStatus.startsWith("Live") || priceStatus.startsWith("Saved daily") ? "fuel.indianapi.in" : "manual";
     }
+    
     let id;
     try { id = await saveEntry(type, data); } catch { localStorage.setItem("vehiclelog-last-entry", JSON.stringify({ type, ...data })); }
     const [title, Icon] = labels[type];
     onRecordSaved(type, { ...data, id: id || Date.now(), createdAt: new Date().toISOString(), activity: { icon: Icon, tone: type === "fuel" ? "orange" : "green", title: `${title} added`, meta: `${data.vehicle} · ${data.note || "New record"}`, amount: data.amount ? `₹${data.amount}` : "Saved", time: "Just now" } });
     setSaving(false); close();
   }
+
   useEffect(() => { if (initialType) setType(initialType); }, [initialType]);
+
   return <div className="modal-wrap" role="presentation" onMouseDown={close}>
     <section className="modal" role="dialog" aria-modal="true" aria-label="Quick add" onMouseDown={(e) => e.stopPropagation()}>
       <header><div><span className="eyebrow">Quick add</span><h2>Log a new record</h2></div><IconButton label="Close" onClick={close}><X size={18}/></IconButton></header>
+      
+      {/* AI Quick Fill Input */}
+      <div style={{ display: "flex", gap: "8px", marginTop: "14px", marginBottom: "6px", background: "#f5f3ef", padding: "8px", borderRadius: "8px" }} className="theme-toggle-bg">
+        <input 
+          placeholder="Describe entry with AI (e.g., 50L petrol at Bangalore, commute daily to Work at 9am)..." 
+          value={aiInput} 
+          onChange={(e) => setAiInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAiFill(); } }}
+          style={{ flex: 1, border: "1px solid #e3dfd7", borderRadius: "8px", padding: "0 10px", height: "36px", background: "white", fontSize: "11px" }}
+          disabled={aiLoading}
+        />
+        <button 
+          type="button" 
+          className="btn primary" 
+          onClick={handleAiFill} 
+          disabled={aiLoading || !aiInput.trim()}
+          style={{ height: "36px", padding: "0 12px", fontSize: "11px" }}
+        >
+          {aiLoading ? "Analyzing..." : "Fill with AI"}
+        </button>
+      </div>
+      {aiError && <div style={{ color: "#c74830", fontSize: "10px", fontWeight: "bold", marginBottom: "8px" }}>{aiError}</div>}
+
       <div className="record-types">
         {Object.entries(labels).map(([key, [label, Icon]]) => <button key={key} className={type === key ? "active" : ""} onClick={() => setType(key)}><Icon size={17}/>{label}</button>)}
       </div>
       {type ? <form onSubmit={submit}>
         <div className="form-grid">
-          <label>Date<CustomDatePicker name="date" defaultValue={new Date().toISOString().slice(0, 10)} /></label>
+          <label>Date<CustomDatePicker name="date" defaultValue={date} onChange={setDate} /></label>
           <label>Vehicle<input name="vehicle" value={vehicle.name} readOnly /></label>
         </div>
-        <label>Current meter reading (km)<input name="odometer" type="number" min={lastFuel?.odometer || vehicle.initialOdometer} placeholder={String(lastFuel?.odometer || vehicle.initialOdometer)} onWheel={(e) => e.target.blur()} required /><small className="field-help">Last recorded meter: {Number(lastFuel?.odometer || vehicle.initialOdometer).toLocaleString("en-IN")} km</small></label>
+        
+        {type !== "schedule" && (
+          <label>Current meter reading (km)<input name="odometer" type="number" min={lastFuel?.odometer || vehicle.initialOdometer} placeholder={String(lastFuel?.odometer || vehicle.initialOdometer)} value={odometer} onChange={(e) => setOdometer(e.target.value)} onWheel={(e) => e.target.blur()} required /><small className="field-help">Last recorded meter: {Number(lastFuel?.odometer || vehicle.initialOdometer).toLocaleString("en-IN")} km</small></label>
+        )}
+
         {type === "fuel" && <>
           <label>Fuel-price city<input name="fuelCity" placeholder="Bangalore" value={fuelCity} onChange={(e) => setFuelCity(e.target.value)} required /><small className="field-help">Matched against the IndianAPI city list. Saved to your vehicle after this refill.</small></label>
           <div className="form-grid">
@@ -353,10 +474,41 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
           </div>
           <div className="fuel-calc"><Fuel size={16}/><div><b>{liters || "0.00"} liters</b><small>{priceStatus}</small></div></div>
         </>}
-        {type === "trips" && <div className="form-grid"><label>Distance (km)<input name="distance" placeholder="18.4" required /></label><label>Destination<input name="destination" placeholder="Indiranagar" required /></label><label>Category<CustomSelect name="category" options={["Work", "Family", "Business", "Personal"]} /></label></div>}
-        {type === "service" && <div className="form-grid"><label>Service type<input name="serviceType" placeholder="Oil and filter change" required /></label><label>Cost (INR)<input name="cost" type="number" min="0" step="0.01" placeholder="1500" onWheel={(e) => e.target.blur()} required /></label></div>}
-        {type === "expenses" && <div className="form-grid"><label>Category<CustomSelect name="category" options={["Parking", "Toll", "Accessories", "Miscellaneous"]} /></label><label>Amount<input name="amount" placeholder="120" required /></label></div>}
-        <label>Note<input name="note" placeholder="Add a short note" /></label>
+
+        {type === "trips" && <div className="form-grid"><label>Distance (km)<input name="distance" placeholder="18.4" value={distance} onChange={(e) => setDistance(e.target.value)} required /></label><label>Destination<input name="destination" placeholder="Indiranagar" value={destination} onChange={(e) => setDestination(e.target.value)} required /></label><label>Category<CustomSelect name="category" value={categorySelect} onChange={setCategorySelect} options={["Work", "Family", "Business", "Personal"]} /></label></div>}
+        
+        {type === "service" && <div className="form-grid"><label>Service type<input name="serviceType" placeholder="Oil and filter change" value={serviceType} onChange={(e) => setServiceType(e.target.value)} required /></label><label>Cost (INR)<input name="cost" type="number" min="0" step="0.01" placeholder="1500" value={cost} onChange={(e) => setCost(e.target.value)} onWheel={(e) => e.target.blur()} required /></label></div>}
+        
+        {type === "expenses" && <div className="form-grid"><label>Category<CustomSelect name="category" value={categorySelect} onChange={setCategorySelect} options={["Parking", "Toll", "Accessories", "Miscellaneous"]} /></label><label>Amount<input name="amount" placeholder="120" value={amount} onChange={(e) => setAmount(e.target.value)} required /></label></div>}
+
+        {type === "schedule" && <>
+          <label>Schedule name<input name="name" value={scheduleName} onChange={(e) => setScheduleName(e.target.value)} required /></label>
+          <div className="form-grid">
+            <label>Destination<input name="destination" placeholder="Work" value={destination} onChange={(e) => setDestination(e.target.value)} required /></label>
+            <label>Distance (km)<input name="distance" type="number" value={distance} onChange={(e) => setDistance(e.target.value)} onWheel={(e) => e.target.blur()} /></label>
+          </div>
+          <div className="form-grid">
+            <label>Repeat<CustomSelect name="repeat" value={scheduleRepeat} onChange={setScheduleRepeat} options={["Daily", "Weekly", "Monthly", "Yearly"]} /></label>
+            <label>Start date<CustomDatePicker name="startDate" defaultValue={date} onChange={setDate} /></label>
+          </div>
+          <div className="form-grid">
+            <label>Completion Time<input name="completionTime" type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} onClick={(e) => e.target.showPicker()} /></label>
+          </div>
+          <div className="weekday-picker" aria-label="Choose weekdays">
+            {weekdays.map((day) => (
+              <button 
+                key={day} 
+                type="button" 
+                className={scheduleDays.includes(day) ? "active" : ""} 
+                onClick={() => setScheduleDays((currentDays) => currentDays.includes(day) ? currentDays.filter((d) => d !== day) : [...currentDays, day])}
+              >
+                {day}
+              </button>
+            ))}
+          </div>
+        </>}
+
+        <label>Note<input name="note" value={type === "schedule" ? scheduleNotes : note} onChange={(e) => type === "schedule" ? setScheduleNotes(e.target.value) : setNote(e.target.value)} placeholder="Add a short note" /></label>
         <footer><button type="button" className="btn ghost" onClick={close}>Cancel</button><button className="btn primary" disabled={saving}><Plus size={17}/>{saving ? "Saving..." : "Add record"}</button></footer>
       </form> : <div className="record-prompt"><Sparkles size={17}/><span>Choose the kind of record you want to add.</span></div>}
     </section>
@@ -767,8 +919,8 @@ function tableForPage(active) {
   return "";
 }
 
-function SettingsPage({ records, vehicle }) {
-  const totalLogs = records.fuel.length + records.trips.length + records.maintenance.length + records.expenses.length + records.schedules.length;
+function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh, vehicle }) {
+  const totalLogs = allRecords.fuel.length + allRecords.trips.length + allRecords.maintenance.length + allRecords.expenses.length + allRecords.schedules.length;
   const configured = Boolean(import.meta.env.VITE_FUEL_API_BASE_URL && import.meta.env.VITE_FUEL_API_KEY);
   const rows = [
     ["Fuel price API", configured ? "Configured from environment" : "Add API base URL and key in .env", configured],
@@ -776,9 +928,212 @@ function SettingsPage({ records, vehicle }) {
     ["Vehicle profile", vehicle ? `${vehicle.name} - ${vehicle.registration}` : "No vehicle profile", Boolean(vehicle)],
     ["Saved logs", `${totalLogs} local record${totalLogs === 1 ? "" : "s"}`, totalLogs > 0],
   ];
+
+  const [exportVehicle, setExportVehicle] = useState("all");
+  const fileInputRef = useRef(null);
+
+  const handleExport = () => {
+    const isFullBackup = exportVehicle === "all";
+    const exportedVehicles = isFullBackup 
+      ? vehicles 
+      : vehicles.filter(v => v.name === exportVehicle);
+      
+    const exportedLogs = {
+      fuel: isFullBackup ? allRecords.fuel : allRecords.fuel.filter(r => r.vehicle === exportVehicle),
+      trips: isFullBackup ? allRecords.trips : allRecords.trips.filter(r => r.vehicle === exportVehicle),
+      maintenance: isFullBackup ? allRecords.maintenance : allRecords.maintenance.filter(r => r.vehicle === exportVehicle),
+      expenses: isFullBackup ? allRecords.expenses : allRecords.expenses.filter(r => r.vehicle === exportVehicle),
+      schedules: isFullBackup ? allRecords.schedules : allRecords.schedules.filter(r => r.vehicle === exportVehicle),
+    };
+    
+    const data = {
+      version: "1.0",
+      exportType: isFullBackup ? "all" : "vehicle-specific",
+      vehicleName: isFullBackup ? null : exportVehicle,
+      vehicles: exportedVehicles,
+      logs: exportedLogs
+    };
+    
+    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+      JSON.stringify(data, null, 2)
+    )}`;
+    const downloadAnchor = document.createElement("a");
+    downloadAnchor.setAttribute("href", jsonString);
+    const filename = isFullBackup 
+      ? `vehiclelog_backup_${new Date().toISOString().slice(0, 10)}.json`
+      : `vehiclelog_${exportVehicle.replace(/\s+/g, '_')}_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    downloadAnchor.setAttribute("download", filename);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data.vehicles || !data.logs) {
+          alert("Invalid backup file format. Missing vehicles or logs.");
+          return;
+        }
+        
+        // 1. Merge vehicles
+        const existingVehicles = [...vehicles];
+        let importedVehiclesCount = 0;
+        const mergedVehicles = [...existingVehicles];
+        
+        for (const importedVehicle of data.vehicles) {
+          const exists = existingVehicles.some(v => v.name.toLowerCase() === importedVehicle.name.toLowerCase());
+          if (!exists) {
+            mergedVehicles.push(importedVehicle);
+            importedVehiclesCount++;
+          }
+        }
+        
+        if (importedVehiclesCount > 0) {
+          localStorage.setItem("vehiclelog-v6-vehicles", JSON.stringify(mergedVehicles));
+          setVehicles(mergedVehicles);
+          if (!vehicle && mergedVehicles.length > 0) {
+            localStorage.setItem("vehiclelog-v6-active-vehicle", JSON.stringify(mergedVehicles[0]));
+            localStorage.setItem("vehiclelog-v6-vehicle", JSON.stringify(mergedVehicles[0]));
+            setVehicle(mergedVehicles[0]);
+          }
+        }
+        
+        // 2. Merge logs
+        let importedLogsCount = 0;
+        const tables = ["fuel", "trips", "maintenance", "expenses", "schedules"];
+        
+        const existingDbLogs = {};
+        for (const table of tables) {
+          existingDbLogs[table] = await getEntries(table);
+        }
+        
+        for (const table of tables) {
+          const importedList = data.logs[table] || [];
+          const existingList = existingDbLogs[table] || [];
+          
+          for (const record of importedList) {
+            let isDup = false;
+            if (table === "fuel") {
+              isDup = existingList.some(e => 
+                String(e.date) === String(record.date) && 
+                String(e.vehicle).toLowerCase() === String(record.vehicle).toLowerCase() && 
+                String(e.amount) === String(record.amount) &&
+                String(e.odometer) === String(record.odometer)
+              );
+            } else if (table === "trips") {
+              isDup = existingList.some(e => 
+                String(e.date) === String(record.date) && 
+                String(e.vehicle).toLowerCase() === String(record.vehicle).toLowerCase() && 
+                String(e.distance) === String(record.distance) &&
+                String(e.destination).toLowerCase() === String(record.destination).toLowerCase()
+              );
+            } else if (table === "maintenance") {
+              isDup = existingList.some(e => 
+                String(e.date) === String(record.date) && 
+                String(e.vehicle).toLowerCase() === String(record.vehicle).toLowerCase() && 
+                String(e.serviceType).toLowerCase() === String(record.serviceType).toLowerCase() &&
+                String(e.cost) === String(record.cost)
+              );
+            } else if (table === "expenses") {
+              isDup = existingList.some(e => 
+                String(e.date) === String(record.date) && 
+                String(e.vehicle).toLowerCase() === String(record.vehicle).toLowerCase() && 
+                String(e.category).toLowerCase() === String(record.category).toLowerCase() &&
+                String(e.amount) === String(record.amount)
+              );
+            } else if (table === "schedules") {
+              isDup = existingList.some(e => 
+                String(e.name).toLowerCase() === String(record.name).toLowerCase() && 
+                String(e.vehicle).toLowerCase() === String(record.vehicle).toLowerCase() && 
+                String(e.repeat).toLowerCase() === String(record.repeat).toLowerCase() &&
+                String(e.startDate) === String(record.startDate)
+              );
+            }
+            
+            if (!isDup) {
+              const { id, ...recordWithoutId } = record;
+              await db.table(table).add({ 
+                ...recordWithoutId, 
+                createdAt: recordWithoutId.createdAt || new Date().toISOString() 
+              });
+              importedLogsCount++;
+            }
+          }
+        }
+        
+        onRefresh();
+        alert(`Import completed successfully!\nMerged ${importedVehiclesCount} new vehicle profile(s) and ${importedLogsCount} new log record(s).`);
+      } catch (err) {
+        console.error(err);
+        alert("Failed to parse or merge backup data. Make sure it's a valid JSON file.");
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = ""; // Reset file input
+  };
+
   return <div className="settings-grid">
     <article className="setting-card"><div><ShieldCheck size={18}/><span className="eyebrow">Privacy</span><h3>Local-first data</h3></div><p>Your vehicle, fuel, travel, expense, and schedule logs are stored locally in this browser. The fuel API is only called when you create a fuel refill.</p></article>
     <article className="setting-card"><div><Fuel size={18}/><span className="eyebrow">Fuel</span><h3>Daily price fetch</h3></div><p>IndianAPI is configured through environment variables so the base URL and key can be replaced without touching the app code.</p></article>
+    
+    <article className="setting-card">
+      <div>
+        <Download size={18}/>
+        <span className="eyebrow">Export</span>
+        <h3>Export backup</h3>
+      </div>
+      <p style={{ marginBottom: "12px" }}>Download a copy of your garage profiles and logs. You can export a full backup or filter by a specific vehicle.</p>
+      <div style={{ display: "flex", gap: "8px", flexDirection: "column" }}>
+        <label style={{ fontSize: "10px", fontWeight: "700", color: "#687679", display: "grid", gap: "4px" }}>
+          Vehicle Filter
+          <CustomSelect
+            name="exportVehicle"
+            value={exportVehicle}
+            onChange={setExportVehicle}
+            options={[
+              { value: "all", label: "All Vehicles (Full Backup)" },
+              ...vehicles.map(v => ({ value: v.name, label: v.name }))
+            ]}
+          />
+        </label>
+        <button type="button" className="btn primary" onClick={handleExport} style={{ marginTop: "8px" }}>
+          <Download size={16}/> Export Backup (JSON)
+        </button>
+      </div>
+    </article>
+
+    <article className="setting-card">
+      <div>
+        <Upload size={18}/>
+        <span className="eyebrow">Import</span>
+        <h3>Import backup</h3>
+      </div>
+      <p style={{ marginBottom: "16px" }}>Upload a previously exported JSON backup file. This will merge new vehicles and logs while safely deduplicating existing entries.</p>
+      <div style={{ display: "grid", gap: "8px" }}>
+        <input
+          type="file"
+          accept=".json"
+          ref={fileInputRef}
+          onChange={handleImportFileChange}
+          style={{ display: "none" }}
+        />
+        <button type="button" className="btn ghost" onClick={handleImportClick} style={{ border: "1px dashed #dedad3", minHeight: "80px", display: "flex", flexDirection: "column", gap: "8px" }}>
+          <Upload size={22} style={{ color: "#e66b2e" }}/>
+          <span style={{ fontSize: "11px", fontWeight: "700" }}>Click to select JSON Backup File</span>
+        </button>
+      </div>
+    </article>
+
     <article className="setting-card wide">
       <span className="eyebrow">System status</span>
       {rows.map(([label, text, on]) => <div className="setting-row" key={label}><div><b>{label}</b><small>{text}</small></div><span className={`switch ${on ? "on" : ""}`}><i></i></span></div>)}
@@ -866,7 +1221,7 @@ function LogDetailModal({ active, record, close, onSave, onDelete }) {
   );
 }
 
-function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehicles, allRecords, allFuelEntries, stats, skippedSchedules, onOpenScheduleDetails }) {
+function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehicles, setVehicles, setVehicle, allRecords, allFuelEntries, stats, skippedSchedules, onOpenScheduleDetails, onRefresh }) {
   const [title, description] = pages[active] || ["Settings", "Tune the experience to match your vehicle life."];
   const [search, setSearch] = useState("");
   const cards = active === "Vehicles" ? vehicleCards(vehicles, allRecords, allFuelEntries) : recordCards(active, records);
@@ -876,7 +1231,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
   const canCreate = !isSettings && !isVehicles;
   const canOpen = !isSettings;
   const [scheduleView, setScheduleView] = useState("calendar");
-
+ 
   const filteredCards = useMemo(() => {
     if (!search.trim()) return cards;
     const term = search.toLowerCase();
@@ -886,10 +1241,10 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
       );
     });
   }, [cards, search]);
-
+ 
   return <section className="secondary-page">
     <div className="secondary-hero"><div><span className="eyebrow">VehicleLog Pro</span><h2>{title}</h2><p>{description}</p></div>{canCreate && <button className="btn primary" onClick={() => setModal(schedule ? "schedule" : addTypeForPage(active))}><Plus size={17}/>{schedule ? "Create schedule" : "Add new"}</button>}</div>
-    {isSettings ? <SettingsPage records={records} vehicle={vehicle}/> : <>
+    {isSettings ? <SettingsPage allRecords={allRecords} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} onRefresh={onRefresh} vehicle={vehicle}/> : <>
       <div className="secondary-toolbar">
         <label className="search">
           <Search size={17}/>
@@ -1254,12 +1609,16 @@ export default function App() {
   const [costPeriod, setCostPeriod] = useState("All time");
   const [allActivitiesModal, setAllActivitiesModal] = useState(false);
 
-  useEffect(() => { getFuelEntries().then(setFuelEntries); }, []);
-  useEffect(() => {
+  const refreshRecords = () => {
     Promise.all([getEntries("fuel"), getEntries("trips"), getEntries("maintenance"), getEntries("expenses"), getEntries("schedules")]).then(([fuel, trips, maintenance, expenses, schedules]) => {
       setRecords({ fuel, trips, maintenance, expenses, schedules });
       setFuelEntries(fuel);
     }).catch((error) => console.error("Unable to load local records", error));
+  };
+
+  useEffect(() => { getFuelEntries().then(setFuelEntries); }, []);
+  useEffect(() => {
+    refreshRecords();
   }, []);
 
   const activeRecords = useMemo(() => {
@@ -1452,8 +1811,8 @@ export default function App() {
 
   return <div className={`app ${dark ? "dark" : ""}`}>
     <Sidebar active={current} setActive={setActive} open={menu} setOpen={setMenu} vehicle={vehicle} vehicles={vehicles} setVehicle={setVehicle} setVehicleModal={setVehicleModal}/>
-    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })}/>}</div></main>
-    {modal && modal !== "schedule" && <Modal close={() => setModal(false)} setActivities={() => {}} vehicle={vehicle} fuelEntries={activeFuelEntries} onRecordSaved={addRecord} onVehicleUpdate={updateVehicle} initialType={modalType}/>}
+    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} />}</div></main>
+    {modal && modal !== "schedule" && <Modal close={() => setModal(false)} setActivities={() => {}} vehicle={vehicle} fuelEntries={activeFuelEntries} onRecordSaved={addRecord} onVehicleUpdate={updateVehicle} initialType={modalType} onScheduleSaved={addSchedule}/>}
     {modal === "schedule" && <ScheduleModal close={() => setModal(false)} onScheduleSaved={addSchedule} vehicle={vehicle}/>}
     {detail && <LogDetailModal active={detail.page} record={detail.record} close={() => setDetail(null)} onSave={saveRecordUpdate} onDelete={deleteRecord}/>}
     {vehicleModal && <VehicleModal close={() => setVehicleModal(false)} addVehicle={addVehicle}/>}
