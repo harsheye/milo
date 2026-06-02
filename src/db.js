@@ -14,8 +14,6 @@ db.version(2).stores({
   trips: "++id,date,vehicle,category",
   maintenance: "++id,date,vehicle,type",
   expenses: "++id,date,vehicle,category",
-}).upgrade(async (tx) => {
-  await Promise.all(["fuel", "trips", "maintenance", "expenses"].map((table) => tx.table(table).clear()));
 });
 
 db.version(3).stores({
@@ -23,8 +21,6 @@ db.version(3).stores({
   trips: "++id,date,vehicle,category",
   maintenance: "++id,date,vehicle,type",
   expenses: "++id,date,vehicle,category",
-}).upgrade(async (tx) => {
-  await Promise.all(["fuel", "trips", "maintenance", "expenses"].map((table) => tx.table(table).clear()));
 });
 
 db.version(4).stores({

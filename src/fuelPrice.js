@@ -6,8 +6,8 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function getCacheKey() {
-  return `${CACHE_PREFIX}:${today()}`;
+function getCacheKey(fuelType) {
+  return `${CACHE_PREFIX}:${fuelType.toLowerCase()}:${today()}`;
 }
 
 function parsePrices(data) {
@@ -23,21 +23,25 @@ function parsePrices(data) {
 
 function findCityPrice(prices, city) {
   const normalized = city.trim().toLowerCase();
-  return prices.find((entry) => entry.city.toLowerCase() === normalized);
+  let match = prices.find((entry) => entry.city.toLowerCase() === normalized);
+  if (!match) {
+    match = prices.find((entry) => {
+      const entryCity = entry.city.toLowerCase();
+      return entryCity.includes(normalized) || normalized.includes(entryCity);
+    });
+  }
+  return match;
 }
 
 export async function fetchDailyFuelPrice(fuelType, city) {
   if (!API_KEY) throw new Error("Fuel API key is not configured.");
-  const key = getCacheKey();
+  const key = getCacheKey(fuelType);
   let prices;
   let cached = false;
   const stored = localStorage.getItem(key);
 
   if (stored) {
     const daily = JSON.parse(stored);
-    if (daily.fuelType !== fuelType.toLowerCase()) {
-      throw new Error(`Today's one-time fuel lookup was already used for ${daily.fuelType}. Enter the ${fuelType.toLowerCase()} rate manually.`);
-    }
     prices = Array.isArray(daily.prices) ? daily.prices : [];
     cached = true;
   } else {
@@ -49,7 +53,12 @@ export async function fetchDailyFuelPrice(fuelType, city) {
     localStorage.setItem(key, JSON.stringify({ fuelType: fuelType.toLowerCase(), prices }));
   }
 
-  const result = findCityPrice(prices, city);
-  if (!result) throw new Error(`No live ${fuelType.toLowerCase()} price was found for ${city}.`);
-  return { ...result, cached, source: BASE_URL };
+  let result = findCityPrice(prices, city);
+  let isFallback = false;
+  if (!result) {
+    result = findCityPrice(prices, "delhi");
+    isFallback = true;
+  }
+  if (!result) throw new Error(`No live ${fuelType.toLowerCase()} price was found for ${city} or Delhi fallback.`);
+  return { ...result, cached, source: BASE_URL, isFallback, originalCity: city };
 }
