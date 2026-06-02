@@ -1236,35 +1236,165 @@ function LogDetailModal({ active, record, close, onSave, onDelete }) {
 
 function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehicles, setVehicles, setVehicle, allRecords, allFuelEntries, stats, skippedSchedules, onOpenScheduleDetails, onRefresh }) {
   const [title, description] = pages[active] || ["Settings", "Tune the experience to match your vehicle life."];
-  const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem(`vehiclelog-v6-viewmode-${active}`) || "list";
   });
   const [sortBy, setSortBy] = useState("time");
   const [sortOrder, setSortOrder] = useState("desc");
 
+  // Filter States
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [tempRange, setTempRange] = useState("all");
+  const [tempStart, setTempStart] = useState("");
+  const [tempEnd, setTempEnd] = useState("");
+  const [tempMin, setTempMin] = useState("");
+  const [tempMax, setTempMax] = useState("");
+
+  const [appliedRange, setAppliedRange] = useState("all");
+  const [appliedStart, setAppliedStart] = useState("");
+  const [appliedEnd, setAppliedEnd] = useState("");
+  const [appliedMin, setAppliedMin] = useState("");
+  const [appliedMax, setAppliedMax] = useState("");
+
+  const filterRef = useRef(null);
+
+  const handleReset = () => {
+    setTempRange("all");
+    setTempStart("");
+    setTempEnd("");
+    setTempMin("");
+    setTempMax("");
+    setAppliedRange("all");
+    setAppliedStart("");
+    setAppliedEnd("");
+    setAppliedMin("");
+    setAppliedMax("");
+    setFilterOpen(false);
+  };
+
   useEffect(() => {
     setViewMode(localStorage.getItem(`vehiclelog-v6-viewmode-${active}`) || "list");
     setSortBy("time");
     setSortOrder("desc");
+    handleReset();
   }, [active]);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (filterRef.current && !filterRef.current.contains(e.target)) {
+        setFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
     localStorage.setItem(`vehiclelog-v6-viewmode-${active}`, mode);
   };
 
+  const handleApply = () => {
+    setAppliedRange(tempRange);
+    setAppliedStart(tempStart);
+    setAppliedEnd(tempEnd);
+    setAppliedMin(tempMin);
+    setAppliedMax(tempMax);
+    setFilterOpen(false);
+  };
+
+  const isFilterApplied = appliedRange !== "all" || appliedMin !== "" || appliedMax !== "";
+
+  const filteredRecords = useMemo(() => {
+    if (!["Fuel log", "Maintenance", "Trips", "Expenses"].includes(active)) {
+      return records;
+    }
+
+    let list = active === "Fuel log" ? (records.fuel || []) :
+               active === "Maintenance" ? (records.maintenance || []) :
+               active === "Trips" ? (records.trips || []) :
+               active === "Expenses" ? (records.expenses || []) : [];
+
+    // 1. Filter by Date range
+    const now = new Date();
+    
+    const getTodayBounds = () => {
+      const todayStr = toLocalDateStr();
+      return [todayStr, todayStr];
+    };
+    
+    const getYesterdayBounds = () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = toLocalDateStr(yesterday);
+      return [yesterdayStr, yesterdayStr];
+    };
+
+    const getThisMonthBounds = () => {
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+      return [`${y}-${m}-01`, `${y}-${m}-${lastDay}`];
+    };
+
+    const getLastMonthBounds = () => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - 1);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const lastDay = new Date(y, d.getMonth() + 1, 0).getDate();
+      return [`${y}-${m}-01`, `${y}-${m}-${lastDay}`];
+    };
+
+    let startBound = "";
+    let endBound = "";
+
+    if (appliedRange === "today") {
+      [startBound, endBound] = getTodayBounds();
+    } else if (appliedRange === "yesterday") {
+      [startBound, endBound] = getYesterdayBounds();
+    } else if (appliedRange === "this-month") {
+      [startBound, endBound] = getThisMonthBounds();
+    } else if (appliedRange === "last-month") {
+      [startBound, endBound] = getLastMonthBounds();
+    } else if (appliedRange === "custom") {
+      startBound = appliedStart;
+      endBound = appliedEnd;
+    }
+
+    if (startBound || endBound) {
+      list = list.filter((r) => {
+        if (!r.date) return false;
+        if (startBound && r.date < startBound) return false;
+        if (endBound && r.date > endBound) return false;
+        return true;
+      });
+    }
+
+    // 2. Filter by Price/Value range
+    if (appliedMin !== "" || appliedMax !== "") {
+      const min = appliedMin !== "" ? Number(appliedMin) : -Infinity;
+      const max = appliedMax !== "" ? Number(appliedMax) : Infinity;
+      
+      list = list.filter((r) => {
+        let val = 0;
+        if (active === "Fuel log") val = Number(r.amount || 0);
+        else if (active === "Maintenance") val = Number(r.cost || 0);
+        else if (active === "Trips") val = Number(r.distance || 0);
+        else if (active === "Expenses") val = Number(r.amount || 0);
+        return val >= min && val <= max;
+      });
+    }
+
+    return list;
+  }, [records, active, appliedRange, appliedStart, appliedEnd, appliedMin, appliedMax]);
+
   const sortedRecords = useMemo(() => {
     if (!["Fuel log", "Maintenance", "Trips", "Expenses"].includes(active)) {
       return records;
     }
 
-    const list = [...(
-      active === "Fuel log" ? (records.fuel || []) :
-      active === "Maintenance" ? (records.maintenance || []) :
-      active === "Trips" ? (records.trips || []) :
-      active === "Expenses" ? (records.expenses || []) : []
-    )];
+    const list = [...filteredRecords];
 
     list.sort((a, b) => {
       let valA, valB;
@@ -1305,7 +1435,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
       trips: active === "Trips" ? list : records.trips,
       expenses: active === "Expenses" ? list : records.expenses,
     };
-  }, [records, active, sortBy, sortOrder]);
+  }, [filteredRecords, active, sortBy, sortOrder]);
 
   const cards = active === "Vehicles" ? vehicleCards(vehicles, allRecords, allFuelEntries) : recordCards(active, sortedRecords);
   const schedule = active === "Schedule";
@@ -1316,23 +1446,27 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
   const [scheduleView, setScheduleView] = useState("calendar");
   const showSortAndView = ["Fuel log", "Maintenance", "Trips", "Expenses"].includes(active);
 
-  const filteredCards = useMemo(() => {
-    if (!search.trim()) return cards;
-    const term = search.toLowerCase();
-    return cards.filter(({ record }) => {
-      return Object.values(record).some((val) =>
-        String(val).toLowerCase().includes(term)
-      );
-    });
-  }, [cards, search]);
+  const sortOptions = useMemo(() => {
+    return [
+      { value: "time-desc", label: "Newest first" },
+      { value: "time-asc", label: "Oldest first" },
+      { value: "price-desc", label: active === "Trips" ? "Longest distance" : "Highest amount" },
+      { value: "price-asc", label: active === "Trips" ? "Shortest distance" : "Lowest amount" }
+    ];
+  }, [active]);
+
+  const rangeOptions = [
+    { value: "all", label: "All time" },
+    { value: "today", label: "Today" },
+    { value: "yesterday", label: "Yesterday" },
+    { value: "this-month", label: "This month" },
+    { value: "last-month", label: "Last month" },
+    { value: "custom", label: "Custom range" }
+  ];
 
   return <section className="secondary-page">
     {isSettings ? <SettingsPage allRecords={allRecords} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} onRefresh={onRefresh} vehicle={vehicle}/> : <>
-      <div className="secondary-toolbar">
-        <label className="search">
-          <Search size={17}/>
-          <input placeholder={`Search ${active.toLowerCase()}...`} value={search} onChange={(e) => setSearch(e.target.value)} />
-        </label>
+      <div className="secondary-toolbar" style={{ display: "flex", gap: "8px", padding: "17px 0", alignItems: "center" }}>
         
         {active === "Schedule" && (
           <div style={{ display: "flex", gap: "4px", padding: "4px", borderRadius: "8px" }} className="theme-toggle-bg">
@@ -1357,21 +1491,17 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
 
         {showSortAndView && (
           <>
-            <select 
-              value={`${sortBy}-${sortOrder}`} 
-              onChange={(e) => {
-                const [by, order] = e.target.value.split("-");
-                setSortBy(by);
-                setSortOrder(order);
-              }}
-              className="toolbar-select"
-              aria-label="Sort options"
-            >
-              <option value="time-desc">Newest first</option>
-              <option value="time-asc">Oldest first</option>
-              <option value="price-desc">{active === "Trips" ? "Longest distance" : "Highest amount"}</option>
-              <option value="price-asc">{active === "Trips" ? "Shortest distance" : "Lowest amount"}</option>
-            </select>
+            <div style={{ width: "160px" }}>
+              <CustomSelect 
+                value={`${sortBy}-${sortOrder}`} 
+                onChange={(val) => {
+                  const [by, order] = val.split("-");
+                  setSortBy(by);
+                  setSortOrder(order);
+                }}
+                options={sortOptions} 
+              />
+            </div>
 
             <div className="view-toggle-group">
               <button 
@@ -1396,8 +1526,91 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
           </>
         )}
         
-        <button className="btn ghost"><Grid2X2 size={16}/>Filters</button>
-        {canCreate && <button className="btn primary" onClick={() => setModal(schedule ? "schedule" : addTypeForPage(active))}><Plus size={17}/>{schedule ? "Create schedule" : "Add new"}</button>}
+        <div style={{ marginLeft: "auto", display: "flex", gap: "8px", alignItems: "center" }}>
+          {showSortAndView && (
+            <div className="filter-wrapper" ref={filterRef} style={{ position: "relative" }}>
+              <button 
+                type="button" 
+                className={`btn ${isFilterApplied ? "primary" : "ghost"}`} 
+                onClick={() => setFilterOpen(!filterOpen)}
+                aria-haspopup="true"
+                aria-expanded={filterOpen}
+              >
+                <Grid2X2 size={16}/>
+                <span>{isFilterApplied ? "Filters active" : "Filters"}</span>
+              </button>
+              {filterOpen && (
+                <div className="custom-select-options filter-popover" style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, width: "290px", padding: "14px", zIndex: 1000, display: "grid", gap: "12px", background: "#fcfbf8" }}>
+                  <label style={{ display: "grid", gap: "4px", fontSize: "10px", fontWeight: "bold", color: "#687679" }}>
+                    Date Period
+                    <CustomSelect
+                      value={tempRange}
+                      onChange={setTempRange}
+                      options={rangeOptions}
+                    />
+                  </label>
+                  
+                  {tempRange === "custom" && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                      <label style={{ display: "grid", gap: "4px", fontSize: "10px", fontWeight: "bold", color: "#687679" }}>
+                        Start Date
+                        <CustomDatePicker
+                          name="filterStart"
+                          defaultValue={tempStart || toLocalDateStr()}
+                          onChange={setTempStart}
+                        />
+                      </label>
+                      <label style={{ display: "grid", gap: "4px", fontSize: "10px", fontWeight: "bold", color: "#687679" }}>
+                        End Date
+                        <CustomDatePicker
+                          name="filterEnd"
+                          defaultValue={tempEnd || toLocalDateStr()}
+                          onChange={setTempEnd}
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  <label style={{ display: "grid", gap: "4px", fontSize: "10px", fontWeight: "bold", color: "#687679" }}>
+                    {active === "Trips" ? "Distance range (km)" : "Amount range (INR)"}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                      <input
+                        type="number"
+                        placeholder="Min"
+                        value={tempMin}
+                        onChange={(e) => setTempMin(e.target.value)}
+                        style={{ height: "39px", padding: "0 10px", border: "1px solid #e3dfd7", borderRadius: "8px", background: "white", fontSize: "12px", width: "100%" }}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Max"
+                        value={tempMax}
+                        onChange={(e) => setTempMax(e.target.value)}
+                        style={{ height: "39px", padding: "0 10px", border: "1px solid #e3dfd7", borderRadius: "8px", background: "white", fontSize: "12px", width: "100%" }}
+                      />
+                    </div>
+                  </label>
+
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "4px", borderTop: "1px solid #eeeae4", paddingTop: "10px" }} className="dark-border-top">
+                    <button type="button" className="btn ghost" onClick={handleReset} style={{ padding: "6px 12px", height: "auto" }}>
+                      Reset
+                    </button>
+                    <button type="button" className="btn primary" onClick={handleApply} style={{ padding: "6px 12px", height: "auto" }}>
+                      Apply
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {canCreate && (
+            <button className="btn primary" onClick={() => setModal(schedule ? "schedule" : addTypeForPage(active))}>
+              <Plus size={17}/>
+              <span>{schedule ? "Create schedule" : "Add new"}</span>
+            </button>
+          )}
+        </div>
       </div>
       
       {schedule && scheduleView === "calendar" ? (
@@ -1410,7 +1623,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
       ) : (
         <>
           {showSortAndView && viewMode === "table" ? (
-            filteredCards.length === 0 ? (
+            cards.length === 0 ? (
               <div className="empty-note">
                 <Sparkles size={18}/>
                 <div>
@@ -1462,7 +1675,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
                     )}
                   </thead>
                   <tbody>
-                    {filteredCards.map(({ record }) => {
+                    {cards.map(({ record }) => {
                       return (
                         <tr key={record.id} onClick={() => onOpenRecord(active, record)}>
                           {active === "Fuel log" && (
@@ -1512,8 +1725,8 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
             )
           ) : (
             <>
-              <div className="data-cards">{filteredCards.map(({ record, fields: [a,b,c,d] }) => <article key={`${active}-${record.id || record.registration || record.name}`} role={canOpen ? "button" : "article"} tabIndex={canOpen ? "0" : undefined} aria-disabled={!canOpen} onClick={canOpen ? () => onOpenRecord(active, record) : undefined}><div className="data-icon">{active === "Schedule" ? <CalendarDays/> : active === "Vehicles" ? <Car/> : <Activity/>}</div><div><h3>{a}</h3><p>{b}</p></div><footer><span>{c}</span><span>{d}</span>{canOpen && <ArrowRight size={17}/>}</footer></article>)}</div>
-              {filteredCards.length === 0 && <div className="empty-note"><Sparkles size={18}/><div><b>{schedule ? "No schedules yet" : "No records yet"}</b><p>{schedule ? "Create a recurring trip or reminder from this page." : "Your records stay on this device. Add new entries and they will appear here instantly."}</p></div>{schedule && <button className="btn primary" onClick={() => setModal("schedule")}><Plus size={16}/>Create schedule</button>}</div>}
+              <div className="data-cards">{cards.map(({ record, fields: [a,b,c,d] }) => <article key={`${active}-${record.id || record.registration || record.name}`} role={canOpen ? "button" : "article"} tabIndex={canOpen ? "0" : undefined} aria-disabled={!canOpen} onClick={canOpen ? () => onOpenRecord(active, record) : undefined}><div className="data-icon">{active === "Schedule" ? <CalendarDays/> : active === "Vehicles" ? <Car/> : <Activity/>}</div><div><h3>{a}</h3><p>{b}</p></div><footer><span>{c}</span><span>{d}</span>{canOpen && <ArrowRight size={17}/>}</footer></article>)}</div>
+              {cards.length === 0 && <div className="empty-note"><Sparkles size={18}/><div><b>{schedule ? "No schedules yet" : "No records yet"}</b><p>{schedule ? "Create a recurring trip or reminder from this page." : "Your records stay on this device. Add new entries and they will appear here instantly."}</p></div>{schedule && <button className="btn primary" onClick={() => setModal("schedule")}><Plus size={16}/>Create schedule</button>}</div>}
             </>
           )}
         </>

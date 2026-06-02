@@ -433,3 +433,51 @@ input[type=number] {
   background: #2a3f45;
 }
 
+/* Filter Popover & Toolbar adjustments */
+.filter-popover input {
+  height: 39px;
+  padding: 0 10px;
+  background: white;
+  border: 1px solid #e3dfd7;
+  border-radius: 8px;
+  color: #415155;
+  font-size: 12px;
+  outline: none;
+  width: 100%;
+}
+.dark .filter-popover input {
+  background: #293d43;
+  border-color: #3b5155;
+  color: #c9d5d4;
+}
+.dark-border-top {
+  border-top: 1px solid #eeeae4;
+}
+.dark .dark-border-top {
+  border-top-color: #354a4f !important;
+}
+.secondary-toolbar .custom-select-container {
+  width: 160px;
+}
+
+@media(max-width:760px){
+  .secondary-toolbar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .secondary-toolbar .custom-select-container {
+    width: 130px;
+  }
+  .filter-popover {
+    width: calc(100vw - 32px) !important;
+    left: auto !important;
+    right: 0 !important;
+    max-width: 290px;
+  }
+  .secondary-toolbar>div:last-child {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+
