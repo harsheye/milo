@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, Bell,
   CalendarDays, Car, CheckCircle2, ChevronDown, CircleDollarSign, Clock3,
-  Download, Droplets, Fuel, Gauge, Grid2X2, LayoutDashboard, MapPin, Menu,
+  Download, Droplets, Fuel, Gauge, Grid2X2, LayoutDashboard, List, MapPin, Menu,
   Moon, MoreHorizontal, Plus, ReceiptText, Search, Settings, ShieldCheck,
-  Sparkles, Sun, Trash2, TrendingUp, Upload, Wrench, X, Zap,
+  Sparkles, Sun, Table, Trash2, TrendingUp, Upload, Wrench, X, Zap,
 } from "lucide-react";
 import { db, deleteEntry, getEntries, getFuelEntries, saveEntry, updateEntry } from "./db";
 import { fetchDailyFuelPrice } from "./fuelPrice";
@@ -1237,14 +1237,85 @@ function LogDetailModal({ active, record, close, onSave, onDelete }) {
 function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehicles, setVehicles, setVehicle, allRecords, allFuelEntries, stats, skippedSchedules, onOpenScheduleDetails, onRefresh }) {
   const [title, description] = pages[active] || ["Settings", "Tune the experience to match your vehicle life."];
   const [search, setSearch] = useState("");
-  const cards = active === "Vehicles" ? vehicleCards(vehicles, allRecords, allFuelEntries) : recordCards(active, records);
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem(`vehiclelog-v6-viewmode-${active}`) || "list";
+  });
+  const [sortBy, setSortBy] = useState("time");
+  const [sortOrder, setSortOrder] = useState("desc");
+
+  useEffect(() => {
+    setViewMode(localStorage.getItem(`vehiclelog-v6-viewmode-${active}`) || "list");
+    setSortBy("time");
+    setSortOrder("desc");
+  }, [active]);
+
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode);
+    localStorage.setItem(`vehiclelog-v6-viewmode-${active}`, mode);
+  };
+
+  const sortedRecords = useMemo(() => {
+    if (!["Fuel log", "Maintenance", "Trips", "Expenses"].includes(active)) {
+      return records;
+    }
+
+    const list = [...(
+      active === "Fuel log" ? (records.fuel || []) :
+      active === "Maintenance" ? (records.maintenance || []) :
+      active === "Trips" ? (records.trips || []) :
+      active === "Expenses" ? (records.expenses || []) : []
+    )];
+
+    list.sort((a, b) => {
+      let valA, valB;
+
+      if (sortBy === "time") {
+        valA = a.date ? new Date(a.date).getTime() : 0;
+        valB = b.date ? new Date(b.date).getTime() : 0;
+      } else {
+        if (active === "Fuel log") {
+          valA = Number(a.amount || 0);
+          valB = Number(b.amount || 0);
+        } else if (active === "Maintenance") {
+          valA = Number(a.cost || 0);
+          valB = Number(b.cost || 0);
+        } else if (active === "Trips") {
+          valA = Number(a.distance || 0);
+          valB = Number(b.distance || 0);
+        } else if (active === "Expenses") {
+          valA = Number(a.amount || 0);
+          valB = Number(b.amount || 0);
+        } else {
+          valA = 0;
+          valB = 0;
+        }
+      }
+
+      if (sortOrder === "asc") {
+        return valA - valB;
+      } else {
+        return valB - valA;
+      }
+    });
+
+    return {
+      ...records,
+      fuel: active === "Fuel log" ? list : records.fuel,
+      maintenance: active === "Maintenance" ? list : records.maintenance,
+      trips: active === "Trips" ? list : records.trips,
+      expenses: active === "Expenses" ? list : records.expenses,
+    };
+  }, [records, active, sortBy, sortOrder]);
+
+  const cards = active === "Vehicles" ? vehicleCards(vehicles, allRecords, allFuelEntries) : recordCards(active, sortedRecords);
   const schedule = active === "Schedule";
   const isSettings = active === "Settings";
   const isVehicles = active === "Vehicles";
   const canCreate = !isSettings && !isVehicles;
   const canOpen = !isSettings;
   const [scheduleView, setScheduleView] = useState("calendar");
- 
+  const showSortAndView = ["Fuel log", "Maintenance", "Trips", "Expenses"].includes(active);
+
   const filteredCards = useMemo(() => {
     if (!search.trim()) return cards;
     const term = search.toLowerCase();
@@ -1254,7 +1325,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
       );
     });
   }, [cards, search]);
- 
+
   return <section className="secondary-page">
     {isSettings ? <SettingsPage allRecords={allRecords} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} onRefresh={onRefresh} vehicle={vehicle}/> : <>
       <div className="secondary-toolbar">
@@ -1262,6 +1333,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
           <Search size={17}/>
           <input placeholder={`Search ${active.toLowerCase()}...`} value={search} onChange={(e) => setSearch(e.target.value)} />
         </label>
+        
         {active === "Schedule" && (
           <div style={{ display: "flex", gap: "4px", padding: "4px", borderRadius: "8px" }} className="theme-toggle-bg">
             <button
@@ -1282,6 +1354,48 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
             </button>
           </div>
         )}
+
+        {showSortAndView && (
+          <>
+            <select 
+              value={`${sortBy}-${sortOrder}`} 
+              onChange={(e) => {
+                const [by, order] = e.target.value.split("-");
+                setSortBy(by);
+                setSortOrder(order);
+              }}
+              className="toolbar-select"
+              aria-label="Sort options"
+            >
+              <option value="time-desc">Newest first</option>
+              <option value="time-asc">Oldest first</option>
+              <option value="price-desc">{active === "Trips" ? "Longest distance" : "Highest amount"}</option>
+              <option value="price-asc">{active === "Trips" ? "Shortest distance" : "Lowest amount"}</option>
+            </select>
+
+            <div className="view-toggle-group">
+              <button 
+                type="button" 
+                className={`view-toggle-btn ${viewMode === "list" ? "active" : ""}`} 
+                onClick={() => handleViewModeChange("list")}
+                title="List View"
+                aria-label="View as list"
+              >
+                <List size={16} />
+              </button>
+              <button 
+                type="button" 
+                className={`view-toggle-btn ${viewMode === "table" ? "active" : ""}`} 
+                onClick={() => handleViewModeChange("table")}
+                title="Table View"
+                aria-label="View as table"
+              >
+                <Table size={16} />
+              </button>
+            </div>
+          </>
+        )}
+        
         <button className="btn ghost"><Grid2X2 size={16}/>Filters</button>
         {canCreate && <button className="btn primary" onClick={() => setModal(schedule ? "schedule" : addTypeForPage(active))}><Plus size={17}/>{schedule ? "Create schedule" : "Add new"}</button>}
       </div>
@@ -1295,8 +1409,113 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
         />
       ) : (
         <>
-          <div className="data-cards">{filteredCards.map(({ record, fields: [a,b,c,d] }) => <article key={`${active}-${record.id || record.registration || record.name}`} role={canOpen ? "button" : "article"} tabIndex={canOpen ? "0" : undefined} aria-disabled={!canOpen} onClick={canOpen ? () => onOpenRecord(active, record) : undefined}><div className="data-icon">{active === "Schedule" ? <CalendarDays/> : active === "Vehicles" ? <Car/> : <Activity/>}</div><div><h3>{a}</h3><p>{b}</p></div><footer><span>{c}</span><span>{d}</span>{canOpen && <ArrowRight size={17}/>}</footer></article>)}</div>
-          {filteredCards.length === 0 && <div className="empty-note"><Sparkles size={18}/><div><b>{schedule ? "No schedules yet" : "No records yet"}</b><p>{schedule ? "Create a recurring trip or reminder from this page." : "Your records stay on this device. Add new entries and they will appear here instantly."}</p></div>{schedule && <button className="btn primary" onClick={() => setModal("schedule")}><Plus size={16}/>Create schedule</button>}</div>}
+          {showSortAndView && viewMode === "table" ? (
+            filteredCards.length === 0 ? (
+              <div className="empty-note">
+                <Sparkles size={18}/>
+                <div>
+                  <b>No records yet</b>
+                  <p>Your records stay on this device. Add new entries and they will appear here instantly.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table className="milo-table">
+                  <thead>
+                    {active === "Fuel log" && (
+                      <tr>
+                        <th>Date</th>
+                        <th>Amount paid</th>
+                        <th>Price</th>
+                        <th>Liters</th>
+                        <th>Mileage</th>
+                        <th>Odometer</th>
+                        <th>City</th>
+                        <th>Note</th>
+                      </tr>
+                    )}
+                    {active === "Maintenance" && (
+                      <tr>
+                        <th>Service type</th>
+                        <th>Date</th>
+                        <th>Cost</th>
+                        <th>Odometer</th>
+                        <th>Note</th>
+                      </tr>
+                    )}
+                    {active === "Trips" && (
+                      <tr>
+                        <th>Destination</th>
+                        <th>Date</th>
+                        <th>Distance</th>
+                        <th>Category</th>
+                        <th>Note</th>
+                      </tr>
+                    )}
+                    {active === "Expenses" && (
+                      <tr>
+                        <th>Category</th>
+                        <th>Date</th>
+                        <th>Amount</th>
+                        <th>Note</th>
+                      </tr>
+                    )}
+                  </thead>
+                  <tbody>
+                    {filteredCards.map(({ record }) => {
+                      return (
+                        <tr key={record.id} onClick={() => onOpenRecord(active, record)}>
+                          {active === "Fuel log" && (
+                            <>
+                              <td>{record.date}</td>
+                              <td>₹{money(Number(record.amount || 0))}</td>
+                              <td>₹{Number(record.pricePerLiter || 0).toFixed(2)}/L</td>
+                              <td>{record.liters || "0.00"} L</td>
+                              <td>{record.mileage || "--"} km/L</td>
+                              <td>{Number(record.odometer || 0).toLocaleString("en-IN")} km</td>
+                              <td>{record.fuelCity || ""}</td>
+                              <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={record.note}>{record.note || ""}</td>
+                            </>
+                          )}
+                          {active === "Maintenance" && (
+                            <>
+                              <td>{record.serviceType || "Service"}</td>
+                              <td>{record.date}</td>
+                              <td>₹{money(Number(record.cost || 0))}</td>
+                              <td>{Number(record.odometer || 0).toLocaleString("en-IN")} km</td>
+                              <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={record.note}>{record.note || ""}</td>
+                            </>
+                          )}
+                          {active === "Trips" && (
+                            <>
+                              <td>{record.destination || "Destination"}</td>
+                              <td>{record.date}</td>
+                              <td>{record.distance || 0} km</td>
+                              <td>{record.category || "Trip"}</td>
+                              <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={record.note}>{record.note || ""}</td>
+                            </>
+                          )}
+                          {active === "Expenses" && (
+                            <>
+                              <td>{record.category || "Expense"}</td>
+                              <td>{record.date}</td>
+                              <td>₹{money(Number(record.amount || 0))}</td>
+                              <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={record.note}>{record.note || ""}</td>
+                            </>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : (
+            <>
+              <div className="data-cards">{filteredCards.map(({ record, fields: [a,b,c,d] }) => <article key={`${active}-${record.id || record.registration || record.name}`} role={canOpen ? "button" : "article"} tabIndex={canOpen ? "0" : undefined} aria-disabled={!canOpen} onClick={canOpen ? () => onOpenRecord(active, record) : undefined}><div className="data-icon">{active === "Schedule" ? <CalendarDays/> : active === "Vehicles" ? <Car/> : <Activity/>}</div><div><h3>{a}</h3><p>{b}</p></div><footer><span>{c}</span><span>{d}</span>{canOpen && <ArrowRight size={17}/>}</footer></article>)}</div>
+              {filteredCards.length === 0 && <div className="empty-note"><Sparkles size={18}/><div><b>{schedule ? "No schedules yet" : "No records yet"}</b><p>{schedule ? "Create a recurring trip or reminder from this page." : "Your records stay on this device. Add new entries and they will appear here instantly."}</p></div>{schedule && <button className="btn primary" onClick={() => setModal("schedule")}><Plus size={16}/>Create schedule</button>}</div>}
+            </>
+          )}
         </>
       )}
     </>}
