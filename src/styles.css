@@ -511,6 +511,100 @@ input[type=number] {
     width: 100%;
     justify-content: flex-end;
   }
+}@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
+.calendar-header-dropdown-list {
+  animation: fadeInScale 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+}
 
+.calendar-header-dropdown-list::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Opera */
+}
+
+.calendar-header-dropdown-item {
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.calendar-header-dropdown-item:hover {
+  background: #eeeae4 !important;
+}
+
+.dark .calendar-header-dropdown-item:hover {
+  background: #3b5155 !important;
+}
+
+.calendar-header-select-btn {
+  transition: background 0.15s ease;
+}
+
+.calendar-header-select-btn:hover {
+  background: #eeeae4;
+}
+
+.dark .calendar-header-select-btn:hover {
+  background: #3b5155;
+}
+
+/* Light & Dark mode variables for absolute floating popovers */
+.app {
+  --dropdown-bg: #fcfbf8;
+  --dropdown-border: #e3dfd7;
+}
+
+.dark {
+  --dropdown-bg: #22353b;
+  --dropdown-border: #3b5155;
+}
+
+/* Notification Dropdown Panel under the Bell */
+.notifications-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  background: var(--dropdown-bg, #fcfbf8);
+  border: 1px solid var(--dropdown-border, #e3dfd7);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(13, 28, 32, 0.16);
+  padding: 14px;
+  z-index: 1050;
+  display: grid;
+  gap: 10px;
+  animation: fadeInScale 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.invisible-scroll {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+}
+
+.invisible-scroll::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Opera */
+}
+
+.dark-border-bottom {
+  border-bottom: 1px solid #efebe5;
+}
+
+.dark .dark-border-bottom {
+  border-bottom-color: #354a4f !important;
+}
+
+.dark-border-top {
+  border-top: 1px solid #eeeae4;
+}
+
+.dark .dark-border-top {
+  border-top-color: #354a4f !important;
+}

@@ -135,6 +135,98 @@ function CustomSelect({ name, value: propValue, defaultValue, options, onChange 
 }
 
 
+function CustomCalendarHeaderSelect({ value, onChange, options, style }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedLabel = useMemo(() => {
+    const found = options.find(o => o.value === value);
+    return found ? found.label : value;
+  }, [value, options]);
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", display: "inline-block", ...style }}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="calendar-header-select-btn"
+        style={{
+          background: "transparent",
+          border: 0,
+          fontWeight: "bold",
+          fontSize: style?.fontSize || "14px",
+          cursor: "pointer",
+          outline: "none",
+          color: "inherit",
+          padding: "2px 6px",
+          borderRadius: "4px",
+          display: "flex",
+          alignItems: "center",
+          gap: "2px"
+        }}
+      >
+        <span>{selectedLabel}</span>
+      </button>
+      {isOpen && (
+        <ul
+          className="calendar-header-dropdown-list"
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            background: "var(--dropdown-bg, #fcfbf8)",
+            border: "1px solid var(--dropdown-border, #e3dfd7)",
+            borderRadius: "8px",
+            boxShadow: "0 4px 12px rgba(13, 28, 32, 0.15)",
+            padding: "4px",
+            margin: "4px 0 0 0",
+            listStyle: "none",
+            maxHeight: "180px",
+            overflowY: "auto",
+            zIndex: 1100,
+            minWidth: "100px",
+            scrollbarWidth: "none",
+            msOverflowStyle: "none"
+          }}
+        >
+          {options.map((opt) => (
+            <li
+              key={opt.value}
+              onClick={() => {
+                onChange(opt.value);
+                setIsOpen(false);
+              }}
+              style={{
+                padding: "6px 10px",
+                fontSize: "12px",
+                cursor: "pointer",
+                borderRadius: "6px",
+                fontWeight: opt.value === value ? "bold" : "normal",
+                background: opt.value === value ? "#fff0e9" : "transparent",
+                color: opt.value === value ? "#e66b2e" : "inherit"
+              }}
+              className="calendar-header-dropdown-item"
+            >
+              {opt.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+
 function CustomDatePicker({ name, defaultValue, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -225,46 +317,18 @@ function CustomDatePicker({ name, defaultValue, onChange }) {
           <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
             <button type="button" className="btn ghost" style={{ padding: "4px 8px", border: "1px solid #e3dfd7", borderRadius: "6px" }} onClick={prevMonth}>&lt;</button>
             <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-              <select 
+              <CustomCalendarHeaderSelect 
                 value={month} 
-                onChange={(e) => setViewDate(new Date(year, Number(e.target.value), 1))}
-                style={{ 
-                  background: "transparent", 
-                  border: 0, 
-                  fontWeight: "bold", 
-                  fontSize: "12px", 
-                  cursor: "pointer", 
-                  outline: "none", 
-                  color: "inherit",
-                  padding: "2px",
-                  borderRadius: "4px"
-                }}
-                className="calendar-header-select"
-              >
-                {monthNames.map((name, idx) => (
-                  <option key={name} value={idx}>{name}</option>
-                ))}
-              </select>
-              <select 
+                onChange={(val) => setViewDate(new Date(year, val, 1))}
+                options={monthNames.map((name, idx) => ({ value: idx, label: name }))}
+                style={{ fontSize: "12px" }}
+              />
+              <CustomCalendarHeaderSelect 
                 value={year} 
-                onChange={(e) => setViewDate(new Date(Number(e.target.value), month, 1))}
-                style={{ 
-                  background: "transparent", 
-                  border: 0, 
-                  fontWeight: "bold", 
-                  fontSize: "12px", 
-                  cursor: "pointer", 
-                  outline: "none", 
-                  color: "inherit",
-                  padding: "2px",
-                  borderRadius: "4px"
-                }}
-                className="calendar-header-select"
-              >
-                {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - 15 + i).map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
+                onChange={(val) => setViewDate(new Date(val, month, 1))}
+                options={Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - 15 + i).map((y) => ({ value: y, label: String(y) }))}
+                style={{ fontSize: "12px" }}
+              />
             </div>
             <button type="button" className="btn ghost" style={{ padding: "4px 8px", border: "1px solid #e3dfd7", borderRadius: "6px" }} onClick={nextMonth}>&gt;</button>
           </header>
@@ -340,7 +404,7 @@ function Donut({ fuel = 0, service = 0, travel = 0, other = 0 }) {
   </svg>;
 }
 
-function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVehicleUpdate, initialType = null, onScheduleSaved, enableAi, enablePriceFetch }) {
+function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVehicleUpdate, initialType = null, onScheduleSaved, enableAi, enablePriceFetch, stats }) {
   const [type, setType] = useState(null);
   const [saving, setSaving] = useState(false);
   const [amount, setAmount] = useState("");
@@ -382,6 +446,18 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
   const lastFuel = fuelEntries[fuelEntries.length - 1];
   const preview = calculateRefill({ amount, pricePerLiter: price, currentOdometer: 0, previousOdometer: 0 });
   const liters = amount && price ? preview.liters.toFixed(2) : "";
+
+  // Fuel level & tank space validation calculations
+  const filledLiters = Number(liters || 0);
+  const lastOdometer = Number(lastFuel?.odometer || vehicle.initialOdometer || 0);
+  const currentOdo = Number(odometer || lastOdometer);
+  const distanceSinceRefuel = Math.max(0, currentOdo - lastOdometer);
+  const averageMileage = Number(stats?.mileage || 15);
+  const consumed = averageMileage > 0 ? distanceSinceRefuel / averageMileage : 0;
+  const tankCapacity = Number(vehicle?.tankCapacity || 50);
+  const fuelBefore = Math.max(0, tankCapacity - consumed);
+  const maxFillableLiters = Math.max(0, tankCapacity - fuelBefore);
+  const refillExceeds = type === "fuel" && filledLiters > maxFillableLiters;
 
   useEffect(() => {
     if (type !== "fuel" || !fuelCity.trim() || !enablePriceFetch) {
@@ -477,6 +553,11 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
     }
 
     if (type === "fuel") {
+      if (refillExceeds) {
+        alert(`Cannot save refill! Liters filled (${filledLiters.toFixed(2)}L) exceeds the remaining tank capacity (${maxFillableLiters.toFixed(2)}L).`);
+        setSaving(false);
+        return;
+      }
       if (fuelCity.trim() && fuelCity.trim() !== vehicle.city) onVehicleUpdate({ ...vehicle, city: fuelCity.trim() });
       const refill = calculateRefill({ amount: data.amount, pricePerLiter: data.pricePerLiter, currentOdometer: data.odometer, previousOdometer: lastFuel?.odometer || vehicle.initialOdometer });
       data.liters = refill.liters.toFixed(2);
@@ -541,6 +622,11 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
             <label>Amount paid (INR)<input name="amount" type="number" min="0" step="0.01" placeholder="2500" value={amount} onChange={(e) => setAmount(e.target.value)} onWheel={(e) => e.target.blur()} required /></label>
             <label>{vehicle.fuel} price (INR/L)<input name="pricePerLiter" type="number" min="0" step="0.01" placeholder="Fetching today's rate..." value={price} onChange={(e) => setPrice(e.target.value)} onWheel={(e) => e.target.blur()} readOnly={autoPrice && enablePriceFetch} required /></label>
           </div>
+          {refillExceeds && (
+            <div style={{ color: "#c74830", fontSize: "11px", fontWeight: "bold", background: "#fdf3f2", border: "1px solid #f6cfca", padding: "8px", borderRadius: "8px", marginTop: "4px" }}>
+              ⚠️ Refill exceeds tank capacity! Max fillable: {maxFillableLiters.toFixed(2)}L (Current fuel: {fuelBefore.toFixed(2)}L / {tankCapacity}L).
+            </div>
+          )}
           <div className="fuel-calc"><Fuel size={16}/><div><b>{liters || "0.00"} liters</b><small>{priceStatus}</small></div></div>
         </>}
 
@@ -578,7 +664,7 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
         </>}
 
         <label>Note<input name="note" value={type === "schedule" ? scheduleNotes : note} onChange={(e) => type === "schedule" ? setScheduleNotes(e.target.value) : setNote(e.target.value)} placeholder="Add a short note" /></label>
-        <footer><button type="button" className="btn ghost" onClick={close}>Cancel</button><button className="btn primary" disabled={saving}><Plus size={17}/>{saving ? "Saving..." : "Add record"}</button></footer>
+        <footer><button type="button" className="btn ghost" onClick={close}>Cancel</button><button className="btn primary" disabled={saving || refillExceeds}><Plus size={17}/>{saving ? "Saving..." : "Add record"}</button></footer>
       </form> : <div className="record-prompt"><Sparkles size={17}/><span>Choose the kind of record you want to add.</span></div>}
     </section>
   </div>;
@@ -588,6 +674,7 @@ function VehicleModal({ close, addVehicle }) {
   function submit(e) {
     e.preventDefault();
     const entry = Object.fromEntries(new FormData(e.currentTarget));
+    entry.tankCapacity = Number(entry.tankCapacity || 50);
     addVehicle(entry);
   }
   return <div className="modal-wrap" role="presentation" onMouseDown={close}>
@@ -597,7 +684,11 @@ function VehicleModal({ close, addVehicle }) {
         <label>Vehicle name<input name="name" placeholder="My daily driver" required autoFocus /></label>
         <div className="form-grid"><label>Registration number<input name="registration" placeholder="KA 01 AB 1234" required /></label><label>Initial meter reading (km)<input name="initialOdometer" type="number" min="0" placeholder="24500" required /></label></div>
         <div className="form-grid"><label>Vehicle type<CustomSelect name="type" options={["Car", "Motorcycle", "Scooter", "Truck"]} /></label><label>Fuel type<CustomSelect name="fuel" options={["Petrol", "Diesel", "CNG", "LPG"]} /></label></div>
-        <label>Home city<input name="city" placeholder="Bangalore" required /><small className="field-help">Used to select your daily fuel rate. The API is contacted only when the fuel-log form opens, at most once per day.</small></label>
+        <div className="form-grid">
+          <label>Tank capacity (L)<input name="tankCapacity" type="number" min="1" placeholder="45" defaultValue="45" required /></label>
+          <label>Home city<input name="city" placeholder="Bangalore" required /></label>
+        </div>
+        <small className="field-help" style={{ marginTop: "-6px", display: "block" }}>Home city is used to select your daily fuel rate. Tank capacity prevents refilling beyond tank space.</small>
         <footer><button type="button" className="btn ghost" onClick={close}>Cancel</button><button className="btn primary"><Plus size={17}/>Add vehicle</button></footer>
       </form>
     </section>
@@ -706,10 +797,94 @@ function Sidebar({ active, setActive, open, setOpen, vehicle, vehicles = [], set
   </aside>;
 }
 
-function Header({ active, setDark, dark, setModal, setMenu, vehicle, notifications = [], setNotificationsModal }) {
+function Header({ active, setDark, dark, setModal, setMenu, vehicle, notifications = [], setScheduleDetail, records, stats }) {
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setNotificationsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const fuelInfo = useMemo(() => {
+    if (!vehicle) return null;
+    const tankCapacity = Number(vehicle.tankCapacity || 50);
+    const fuelRefills = [...(records?.fuel || [])].sort((a, b) => Number(b.odometer) - Number(a.odometer));
+    if (fuelRefills.length === 0) {
+      return { percentage: 75, level: tankCapacity * 0.75, capacity: tankCapacity };
+    }
+    const lastRefill = fuelRefills[0];
+    const lastOdometer = Number(lastRefill.odometer || 0);
+    const currentOdometer = Number(stats?.currentOdometer || lastOdometer);
+    const distanceSinceRefuel = Math.max(0, currentOdometer - lastOdometer);
+    const averageMileage = Number(stats?.mileage || 15);
+    const consumed = averageMileage > 0 ? distanceSinceRefuel / averageMileage : 0;
+    const level = Math.max(0, tankCapacity - consumed);
+    const percentage = Math.min(100, Math.max(0, Math.round((level / tankCapacity) * 100)));
+    return { percentage, level, capacity: tankCapacity };
+  }, [vehicle, records?.fuel, stats]);
+
   return <header className="topbar">
     <div className="page-heading"><IconButton label="Open menu" className="mobile-menu" onClick={() => setMenu(true)}><Menu size={20}/></IconButton><div><span className="eyebrow">Monday · June 01</span><h1>{active === "Overview" ? <>Good morning, <i>Harsh.</i></> : active}</h1></div></div>
-    <div className="top-actions"><IconButton label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={18}/> : <Moon size={18}/>}</IconButton><IconButton label="Notifications" className={notifications.length > 0 ? "has-dot" : ""} onClick={() => setNotificationsModal(true)}><Bell size={18}/></IconButton>{vehicle && <button className="btn primary" onClick={() => setModal(true)}><Plus size={17}/>Quick add</button>}</div>
+    <div className="top-actions" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+      {fuelInfo && (
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#f5f3ef", padding: "6px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", border: "1px solid #e7e3dc" }} className="theme-toggle-bg" title={`Fuel Level: ${fuelInfo.level.toFixed(1)}L / ${fuelInfo.capacity}L`}>
+          <Fuel size={13} style={{ color: fuelInfo.percentage < 20 ? "#c74830" : "#3c8174" }}/>
+          <span>{fuelInfo.percentage}%</span>
+        </div>
+      )}
+      <IconButton label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={18}/> : <Moon size={18}/>}</IconButton>
+      <div style={{ position: "relative" }} ref={containerRef}>
+        <IconButton 
+          label="Notifications" 
+          className={notifications.length > 0 ? "has-dot" : ""} 
+          onClick={() => setNotificationsOpen(!notificationsOpen)}
+        >
+          <Bell size={18}/>
+        </IconButton>
+        {notificationsOpen && (
+          <div className="notifications-dropdown">
+            <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #efebe5", paddingBottom: "8px" }} className="dark-border-top">
+              <h3 style={{ margin: 0, fontSize: "12px", fontWeight: "bold" }}>Alerts</h3>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "10px", background: notifications.length > 0 ? "#fff0e9" : "#f1ede7", color: notifications.length > 0 ? "#e66b2e" : "#849092", fontWeight: "bold" }}>
+                {notifications.length} Pending
+              </span>
+            </header>
+            <div style={{ maxHeight: "250px", overflowY: "auto", display: "grid", gap: "8px", paddingRight: "4px" }} className="invisible-scroll">
+              {notifications.map((n) => (
+                <div key={n.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #eeeae4" }} className="dark-border-top">
+                  <div style={{ flex: 1, minWidth: 0, paddingRight: "8px" }}>
+                    <b style={{ fontSize: "11px", display: "block", textOverflow: "ellipsis", overflow: "hidden" }}>{n.schedule.name}</b>
+                    <small style={{ fontSize: "9px", color: "#647176", display: "block", marginTop: "2px" }}>Time: {n.schedule.completionTime || "18:00"}</small>
+                  </div>
+                  <button
+                    className="btn primary"
+                    style={{ padding: "4px 8px", fontSize: "9px", borderRadius: "6px", height: "auto", fontWeight: "bold" }}
+                    onClick={() => {
+                      setNotificationsOpen(false);
+                      setScheduleDetail({ schedule: n.schedule, dateStr: n.dateStr, isCompleted: n.isCompleted, isSkipped: n.isSkipped });
+                    }}
+                  >
+                    Action
+                  </button>
+                </div>
+              ))}
+              {notifications.length === 0 && (
+                <div style={{ textAlign: "center", padding: "16px", color: "#849092", fontSize: "11px" }}>
+                  All caught up! No pending alerts.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      {vehicle && <button className="btn primary" onClick={() => setModal(true)}><Plus size={17}/>Quick add</button>}
+    </div>
   </header>;
 }
 
@@ -2006,26 +2181,18 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
       <div className="panel" style={{ padding: "20px" }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
           <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-            <select 
+            <CustomCalendarHeaderSelect 
               value={month} 
-              onChange={(e) => setCurrentDate(new Date(year, Number(e.target.value), 1))}
-              className="calendar-header-select"
+              onChange={(val) => setCurrentDate(new Date(year, val, 1))}
+              options={monthNames.map((name, idx) => ({ value: idx, label: name }))}
               style={{ fontSize: "16px" }}
-            >
-              {monthNames.map((name, idx) => (
-                <option key={name} value={idx}>{name}</option>
-              ))}
-            </select>
-            <select 
+            />
+            <CustomCalendarHeaderSelect 
               value={year} 
-              onChange={(e) => setCurrentDate(new Date(Number(e.target.value), month, 1))}
-              className="calendar-header-select"
+              onChange={(val) => setCurrentDate(new Date(val, month, 1))}
+              options={Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - 15 + i).map((y) => ({ value: y, label: String(y) }))}
               style={{ fontSize: "16px" }}
-            >
-              {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - 15 + i).map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
+            />
           </div>
           <div style={{ display: "flex", gap: "8px" }}>
             <button type="button" className="btn ghost" onClick={prevMonth} style={{ padding: "6px 12px" }}>&lt; Prev</button>
@@ -2437,8 +2604,8 @@ export default function App() {
 
   return <div className={`app ${dark ? "dark" : ""}`}>
     <Sidebar active={current} setActive={setActive} open={menu} setOpen={setMenu} vehicle={vehicle} vehicles={vehicles} setVehicle={setVehicle} setVehicleModal={setVehicleModal}/>
-    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setNotificationsModal={setNotificationsModal}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} />}</div></main>
-    {modal && <Modal close={() => setModal(false)} setActivities={() => {}} vehicle={vehicle} fuelEntries={activeFuelEntries} onRecordSaved={addRecord} onVehicleUpdate={updateVehicle} initialType={modal === true ? null : modal} onScheduleSaved={addSchedule} enableAi={enableAi} enablePriceFetch={enablePriceFetch} />}
+    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setScheduleDetail={setScheduleDetail} records={activeRecords} stats={stats}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} />}</div></main>
+    {modal && <Modal close={() => setModal(false)} setActivities={() => {}} vehicle={vehicle} fuelEntries={activeFuelEntries} onRecordSaved={addRecord} onVehicleUpdate={updateVehicle} initialType={modal === true ? null : modal} onScheduleSaved={addSchedule} enableAi={enableAi} enablePriceFetch={enablePriceFetch} stats={stats} />}
     {detail && <LogDetailModal active={detail.page} record={detail.record} close={() => setDetail(null)} onSave={saveRecordUpdate} onDelete={deleteRecord}/>}
     {vehicleModal && <VehicleModal close={() => setVehicleModal(false)} addVehicle={addVehicle}/>}
     {scheduleDetail && <ScheduleDetailsModal schedule={scheduleDetail.schedule} dateStr={scheduleDetail.dateStr} isCompleted={scheduleDetail.isCompleted} isSkipped={scheduleDetail.isSkipped} close={() => setScheduleDetail(null)} onAccept={handleLogTripFromSchedule} onSkip={handleSkipSchedule} />}
@@ -2458,47 +2625,6 @@ export default function App() {
             {allActivities.length === 0 && <EmptyWidget text="Your activity will appear here." />}
           </div>
           <footer><button className="btn primary" onClick={() => setAllActivitiesModal(false)}>Close</button></footer>
-        </section>
-      </div>
-    )}
-
-    {notificationsModal && (
-      <div className="modal-wrap" role="presentation" onMouseDown={() => setNotificationsModal(false)}>
-        <section className="modal" role="dialog" aria-modal="true" aria-label="Notifications" onMouseDown={(e) => e.stopPropagation()}>
-          <header>
-            <div>
-              <span className="eyebrow">Notifications</span>
-              <h2>Your Alerts</h2>
-            </div>
-            <IconButton label="Close" onClick={() => setNotificationsModal(false)}><X size={18}/></IconButton>
-          </header>
-          <div className="activity-list" style={{ maxHeight: "350px", overflowY: "auto", marginTop: "16px", paddingRight: "4px" }}>
-            {notifications.map((n) => (
-              <div className="activity" key={n.id} style={{ borderTop: "1px solid #efebe5", padding: "12px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", gap: "9px", alignItems: "center", flex: 1, minWidth: 0 }}>
-                  <div className="activity-icon orange" style={{ minWidth: "31px" }}><CalendarDays size={16}/></div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <b style={{ fontSize: "12px", display: "block", textOverflow: "ellipsis", overflow: "hidden" }}>{n.title}</b>
-                    <small style={{ fontSize: "10px", color: "#647176", display: "block", marginTop: "3px", textOverflow: "ellipsis", overflow: "hidden" }}>{n.message}</small>
-                  </div>
-                </div>
-                <button
-                  className="btn primary"
-                  style={{ padding: "6px 12px", fontSize: "10px", borderRadius: "6px", height: "auto", marginLeft: "8px" }}
-                  onClick={() => {
-                    setNotificationsModal(false);
-                    setScheduleDetail({ schedule: n.schedule, dateStr: n.dateStr, isCompleted: n.isCompleted, isSkipped: n.isSkipped });
-                  }}
-                >
-                  Action
-                </button>
-              </div>
-            ))}
-            {notifications.length === 0 && <EmptyWidget text="No new notifications." />}
-          </div>
-          <footer>
-            <button className="btn primary" onClick={() => setNotificationsModal(false)}>Close</button>
-          </footer>
         </section>
       </div>
     )}
