@@ -11,6 +11,26 @@ import { fetchDailyFuelPrice } from "./fuelPrice";
 import { calculateRefill } from "./calculations";
 import { parseInputWithAI } from "./gemini";
 
+export function toLocalDateStr(date) {
+  if (!date) {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  if (typeof date === "string") {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return "";
+    return toLocalDateStr(d);
+  }
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 const nav = [
   ["Overview", LayoutDashboard],
   ["Vehicles", Car],
@@ -145,7 +165,7 @@ function CustomDatePicker({ name, defaultValue, onChange }) {
   }, []);
 
   const formatDate = (date) => {
-    return date.toISOString().slice(0, 10);
+    return toLocalDateStr(date);
   };
 
   const getDaysInMonth = (year, month) => {
@@ -296,7 +316,7 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
   const [serviceType, setServiceType] = useState("");
   const [cost, setCost] = useState("");
   const [note, setNote] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(toLocalDateStr());
 
   // Schedule specific states
   const [scheduleName, setScheduleName] = useState("");
@@ -552,7 +572,7 @@ function ScheduleModal({ close, onScheduleSaved, vehicle }) {
       <form onSubmit={submit}>
         <label>Schedule name<input name="name" defaultValue="Office commute" required autoFocus /></label>
         <div className="form-grid"><label>Destination<input name="destination" defaultValue="Work" required /></label><label>Distance (km)<input name="distance" type="number" defaultValue="18" onWheel={(e) => e.target.blur()} /></label></div>
-        <div className="form-grid"><label>Repeat<CustomSelect name="repeat" options={["Daily", "Weekly", "Monthly", "Yearly"]} /></label><label>Start date<CustomDatePicker name="startDate" defaultValue={new Date().toISOString().slice(0, 10)} /></label></div>
+        <div className="form-grid"><label>Repeat<CustomSelect name="repeat" options={["Daily", "Weekly", "Monthly", "Yearly"]} /></label><label>Start date<CustomDatePicker name="startDate" defaultValue={toLocalDateStr()} /></label></div>
         <div className="form-grid"><label>Completion Time<input name="completionTime" type="time" defaultValue="18:00" onClick={(e) => e.target.showPicker()} /></label></div>
         <div className="weekday-picker" aria-label="Choose weekdays">{weekdays.map((day) => <button key={day} type="button" className={days.includes(day) ? "active" : ""} onClick={() => setDays((currentDays) => currentDays.includes(day) ? currentDays.filter((d) => d !== day) : [...currentDays, day])}>{day}</button>)}</div>
         <label>Notes<input name="notes" placeholder="Optional reminder notes" /></label>
@@ -637,20 +657,10 @@ function Sidebar({ active, setActive, open, setOpen, vehicle, vehicles = [], set
   </aside>;
 }
 
-function Header({ active, setDark, dark, setModal, setMenu, vehicle }) {
-  const [online, setOnline] = useState(navigator.onLine);
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    return () => {
-      window.removeEventListener("online", update);
-      window.removeEventListener("offline", update);
-    };
-  }, []);
+function Header({ active, setDark, dark, setModal, setMenu, vehicle, notifications = [], setNotificationsModal }) {
   return <header className="topbar">
     <div className="page-heading"><IconButton label="Open menu" className="mobile-menu" onClick={() => setMenu(true)}><Menu size={20}/></IconButton><div><span className="eyebrow">Monday · June 01</span><h1>{active === "Overview" ? <>Good morning, <i>Harsh.</i></> : active}</h1></div></div>
-    <div className="top-actions"><div className={`connection ${online ? "online" : "offline"}`} title={online ? "Internet available. Vehicle records remain local." : "No internet connection. Local records remain available."}><i></i><span>{online ? "Local mode" : "Offline mode"}</span></div><label className="search"><Search size={17}/><input placeholder="Search anything..." /></label><IconButton label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={18}/> : <Moon size={18}/>}</IconButton><IconButton label="Notifications" className="has-dot"><Bell size={18}/></IconButton>{vehicle && <button className="btn primary" onClick={() => setModal(true)}><Plus size={17}/>Quick add</button>}</div>
+    <div className="top-actions"><IconButton label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={18}/> : <Moon size={18}/>}</IconButton><IconButton label="Notifications" className={notifications.length > 0 ? "has-dot" : ""} onClick={() => setNotificationsModal(true)}><Bell size={18}/></IconButton>{vehicle && <button className="btn primary" onClick={() => setModal(true)}><Plus size={17}/>Quick add</button>}</div>
   </header>;
 }
 
@@ -710,14 +720,14 @@ function Overview({
   const otherSpend = useMemo(() => periodExp.filter(r => r.category === "Accessories" || r.category === "Miscellaneous").reduce((sum, r) => sum + Number(r.amount || 0), 0), [periodExp]);
   const totalSpend = fuelSpend + serviceSpend + travelSpend + otherSpend;
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = toLocalDateStr();
   const todaySchedules = useMemo(() => {
     return records.schedules.filter(s => isScheduleActiveOnDate(s, todayStr));
   }, [records.schedules, todayStr]);
 
   return <>
     <section className="hero">
-      <div><span className="eyebrow">Your vehicle at a glance</span><h2>{vehicle.name} is ready to <em>roll.</em></h2><p>Current meter <b>{stats.currentOdometer.toLocaleString("en-IN")} km</b>. {stats.fuelCount ? "Mileage is calculated from your saved refills." : "Add your first refill to start building useful insights."}</p></div>
+      <div><span className="eyebrow">Your vehicle at a glance</span><h2>{vehicle.name}</h2><p>Current meter <b>{stats.currentOdometer.toLocaleString("en-IN")} km</b>. {stats.fuelCount ? "Mileage is calculated from your saved refills." : "Add your first refill to start building useful insights."}</p></div>
       <div className="hero-score"><div><span>Vehicle health</span><strong>--</strong><small>/ 100</small></div><div className="score-ring"><ShieldCheck size={27}/></div></div>
     </section>
     <section className="metric-grid">
@@ -954,18 +964,21 @@ function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh
       logs: exportedLogs
     };
     
-    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
-      JSON.stringify(data, null, 2)
-    )}`;
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    
     const downloadAnchor = document.createElement("a");
-    downloadAnchor.setAttribute("href", jsonString);
+    downloadAnchor.href = url;
     const filename = isFullBackup 
-      ? `vehiclelog_backup_${new Date().toISOString().slice(0, 10)}.json`
-      : `vehiclelog_${exportVehicle.replace(/\s+/g, '_')}_backup_${new Date().toISOString().slice(0, 10)}.json`;
-    downloadAnchor.setAttribute("download", filename);
+      ? `vehiclelog_backup_${toLocalDateStr()}.json`
+      : `vehiclelog_${exportVehicle.replace(/\s+/g, '_')}_backup_${toLocalDateStr()}.json`;
+    downloadAnchor.download = filename;
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
-    downloadAnchor.remove();
+    
+    document.body.removeChild(downloadAnchor);
+    URL.revokeObjectURL(url);
   };
 
   const handleImportClick = () => {
@@ -1243,7 +1256,6 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
   }, [cards, search]);
  
   return <section className="secondary-page">
-    <div className="secondary-hero"><div><span className="eyebrow">VehicleLog Pro</span><h2>{title}</h2><p>{description}</p></div>{canCreate && <button className="btn primary" onClick={() => setModal(schedule ? "schedule" : addTypeForPage(active))}><Plus size={17}/>{schedule ? "Create schedule" : "Add new"}</button>}</div>
     {isSettings ? <SettingsPage allRecords={allRecords} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} onRefresh={onRefresh} vehicle={vehicle}/> : <>
       <div className="secondary-toolbar">
         <label className="search">
@@ -1271,7 +1283,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
           </div>
         )}
         <button className="btn ghost"><Grid2X2 size={16}/>Filters</button>
-        <button className="btn ghost"><Download size={16}/>Export</button>
+        {canCreate && <button className="btn primary" onClick={() => setModal(schedule ? "schedule" : addTypeForPage(active))}><Plus size={17}/>{schedule ? "Create schedule" : "Add new"}</button>}
       </div>
       
       {schedule && scheduleView === "calendar" ? (
@@ -1330,7 +1342,7 @@ function isScheduleActiveOnDate(schedule, date) {
 }
 
 function ScheduleDetailsModal({ schedule, dateStr, isCompleted, isSkipped, close, onAccept, onSkip }) {
-  const isToday = dateStr === new Date().toISOString().slice(0, 10);
+  const isToday = dateStr === toLocalDateStr();
   const timePassed = isTimePassed(schedule.completionTime);
   const canAccept = isToday && timePassed && !isCompleted && !isSkipped;
 
@@ -1427,7 +1439,7 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
     days.push(new Date(year, month, i));
   }
 
-  const selectedDateStr = selectedDate.toISOString().slice(0, 10);
+  const selectedDateStr = toLocalDateStr(selectedDate);
   const selectedSchedules = useMemo(() => {
     return schedules.filter(s => isScheduleActiveOnDate(s, selectedDateStr));
   }, [schedules, selectedDateStr]);
@@ -1456,7 +1468,7 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
           {days.map((date, idx) => {
             if (!date) return <div key={`empty-${idx}`} style={{ minHeight: "64px" }} />;
             
-            const dateStr = date.toISOString().slice(0, 10);
+            const dateStr = toLocalDateStr(date);
             const activeSchedulesForDay = schedules.filter(s => isScheduleActiveOnDate(s, dateStr));
             const hasSchedules = activeSchedulesForDay.length > 0;
             const isSelected = selectedDate.toDateString() === date.toDateString();
@@ -1522,7 +1534,7 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
             } else if (isSkipped) {
               statusText = "Skipped";
               statusClass = "connection offline";
-            } else if (selectedDateStr === new Date().toISOString().slice(0, 10)) {
+            } else if (selectedDateStr === toLocalDateStr()) {
               statusText = timePassed ? "Done?" : "To be done";
               statusClass = timePassed ? "connection offline" : "connection online";
             }
@@ -1608,6 +1620,7 @@ export default function App() {
   const [timePeriod, setTimePeriod] = useState("All time");
   const [costPeriod, setCostPeriod] = useState("All time");
   const [allActivitiesModal, setAllActivitiesModal] = useState(false);
+  const [notificationsModal, setNotificationsModal] = useState(false);
 
   const refreshRecords = () => {
     Promise.all([getEntries("fuel"), getEntries("trips"), getEntries("maintenance"), getEntries("expenses"), getEntries("schedules")]).then(([fuel, trips, maintenance, expenses, schedules]) => {
@@ -1632,6 +1645,31 @@ export default function App() {
       schedules: records.schedules.filter(r => r.vehicle === name),
     };
   }, [records, vehicle]);
+
+  const notifications = useMemo(() => {
+    if (!vehicle) return [];
+    const todayStr = toLocalDateStr();
+    const todaySchedules = records.schedules.filter(s => s.vehicle === vehicle.name && isScheduleActiveOnDate(s, todayStr));
+    const list = [];
+    for (const s of todaySchedules) {
+      const isCompleted = records.trips.some(t => t.vehicle === vehicle.name && t.date === todayStr && t.note.includes(`Completed scheduled trip: ${s.name}`));
+      const isSkipped = skippedSchedules[s.id]?.includes(todayStr);
+      const timePassed = isTimePassed(s.completionTime);
+      if (timePassed && !isCompleted && !isSkipped) {
+        list.push({
+          id: `schedule-${s.id}-${todayStr}`,
+          type: "schedule-pending",
+          title: "Schedule Pending",
+          message: `"${s.name}" completion time (${s.completionTime || "18:00"}) has passed.`,
+          schedule: s,
+          dateStr: todayStr,
+          isCompleted,
+          isSkipped
+        });
+      }
+    }
+    return list;
+  }, [records.schedules, records.trips, skippedSchedules, vehicle]);
 
   const activeFuelEntries = useMemo(() => {
     if (!vehicle) return [];
@@ -1774,7 +1812,7 @@ export default function App() {
 
   async function handleLogTripFromSchedule(schedule) {
     const tripData = {
-      date: new Date().toISOString().slice(0, 10),
+      date: toLocalDateStr(),
       vehicle: vehicle.name,
       distance: schedule.distance || "0",
       destination: schedule.destination || "Destination",
@@ -1811,7 +1849,7 @@ export default function App() {
 
   return <div className={`app ${dark ? "dark" : ""}`}>
     <Sidebar active={current} setActive={setActive} open={menu} setOpen={setMenu} vehicle={vehicle} vehicles={vehicles} setVehicle={setVehicle} setVehicleModal={setVehicleModal}/>
-    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} />}</div></main>
+    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setNotificationsModal={setNotificationsModal}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} />}</div></main>
     {modal && <Modal close={() => setModal(false)} setActivities={() => {}} vehicle={vehicle} fuelEntries={activeFuelEntries} onRecordSaved={addRecord} onVehicleUpdate={updateVehicle} initialType={modal === true ? null : modal} onScheduleSaved={addSchedule}/>}
     {detail && <LogDetailModal active={detail.page} record={detail.record} close={() => setDetail(null)} onSave={saveRecordUpdate} onDelete={deleteRecord}/>}
     {vehicleModal && <VehicleModal close={() => setVehicleModal(false)} addVehicle={addVehicle}/>}
@@ -1832,6 +1870,47 @@ export default function App() {
             {allActivities.length === 0 && <EmptyWidget text="Your activity will appear here." />}
           </div>
           <footer><button className="btn primary" onClick={() => setAllActivitiesModal(false)}>Close</button></footer>
+        </section>
+      </div>
+    )}
+
+    {notificationsModal && (
+      <div className="modal-wrap" role="presentation" onMouseDown={() => setNotificationsModal(false)}>
+        <section className="modal" role="dialog" aria-modal="true" aria-label="Notifications" onMouseDown={(e) => e.stopPropagation()}>
+          <header>
+            <div>
+              <span className="eyebrow">Notifications</span>
+              <h2>Your Alerts</h2>
+            </div>
+            <IconButton label="Close" onClick={() => setNotificationsModal(false)}><X size={18}/></IconButton>
+          </header>
+          <div className="activity-list" style={{ maxHeight: "350px", overflowY: "auto", marginTop: "16px", paddingRight: "4px" }}>
+            {notifications.map((n) => (
+              <div className="activity" key={n.id} style={{ borderTop: "1px solid #efebe5", padding: "12px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "9px", alignItems: "center", flex: 1, minWidth: 0 }}>
+                  <div className="activity-icon orange" style={{ minWidth: "31px" }}><CalendarDays size={16}/></div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <b style={{ fontSize: "12px", display: "block", textOverflow: "ellipsis", overflow: "hidden" }}>{n.title}</b>
+                    <small style={{ fontSize: "10px", color: "#647176", display: "block", marginTop: "3px", textOverflow: "ellipsis", overflow: "hidden" }}>{n.message}</small>
+                  </div>
+                </div>
+                <button
+                  className="btn primary"
+                  style={{ padding: "6px 12px", fontSize: "10px", borderRadius: "6px", height: "auto", marginLeft: "8px" }}
+                  onClick={() => {
+                    setNotificationsModal(false);
+                    setScheduleDetail({ schedule: n.schedule, dateStr: n.dateStr, isCompleted: n.isCompleted, isSkipped: n.isSkipped });
+                  }}
+                >
+                  Action
+                </button>
+              </div>
+            ))}
+            {notifications.length === 0 && <EmptyWidget text="No new notifications." />}
+          </div>
+          <footer>
+            <button className="btn primary" onClick={() => setNotificationsModal(false)}>Close</button>
+          </footer>
         </section>
       </div>
     )}
