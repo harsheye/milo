@@ -865,8 +865,10 @@ function Header({ active, setDark, dark, setModal, setMenu, vehicle, notificatio
     return { percentage, level, capacity: tankCapacity };
   }, [vehicle, records?.fuel, stats]);
 
+  const displayDate = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "2-digit" }).replace(", ", " · ");
+
   return <header className="topbar">
-    <div className="page-heading"><IconButton label="Open menu" className="mobile-menu" onClick={() => setMenu(true)}><Menu size={20}/></IconButton><div><span className="eyebrow">Monday · June 01</span><h1>{active === "Overview" ? <>Good morning, <i>Harsh.</i></> : active}</h1></div></div>
+    <div className="page-heading"><IconButton label="Open menu" className="mobile-menu" onClick={() => setMenu(true)}><Menu size={20}/></IconButton><div><span className="eyebrow">{displayDate}</span><h1>{active === "Overview" ? <>Good morning, <i>Harsh.</i></> : active}</h1></div></div>
     <div className="top-actions" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
       {fuelInfo && (
         <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#f5f3ef", padding: "6px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", border: "1px solid #e7e3dc" }} className="theme-toggle-bg" title={`Fuel Level: ${fuelInfo.level.toFixed(1)}L / ${fuelInfo.capacity}L`}>
