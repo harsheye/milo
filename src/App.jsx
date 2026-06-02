@@ -449,13 +449,26 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
 
   // Fuel level & tank space validation calculations
   const filledLiters = Number(liters || 0);
-  const lastOdometer = Number(lastFuel?.odometer || vehicle.initialOdometer || 0);
-  const currentOdo = Number(odometer || lastOdometer);
-  const distanceSinceRefuel = Math.max(0, currentOdo - lastOdometer);
-  const averageMileage = Number(stats?.mileage || 15);
-  const consumed = averageMileage > 0 ? distanceSinceRefuel / averageMileage : 0;
   const tankCapacity = Number(vehicle?.tankCapacity || 50);
-  const fuelBefore = Math.max(0, tankCapacity - consumed);
+  const initialFuel = Number(vehicle?.currentFuelLevel ?? (tankCapacity * 0.75));
+  const initialOdo = Number(vehicle?.currentFuelOdometer ?? vehicle?.initialOdometer ?? 0);
+
+  let baselineFuel = initialFuel;
+  let baselineOdo = initialOdo;
+
+  if (lastFuel) {
+    const refillOdo = Number(lastFuel.odometer || 0);
+    if (refillOdo > initialOdo) {
+      baselineFuel = tankCapacity; // Assume tank was filled to capacity
+      baselineOdo = refillOdo;
+    }
+  }
+
+  const currentOdo = Number(odometer || baselineOdo);
+  const refillDistance = Math.max(0, currentOdo - baselineOdo);
+  const averageMileage = Number(stats?.mileage || 15);
+  const consumed = averageMileage > 0 ? refillDistance / averageMileage : 0;
+  const fuelBefore = Math.max(0, baselineFuel - consumed);
   const maxFillableLiters = Math.max(0, tankCapacity - fuelBefore);
   const refillExceeds = type === "fuel" && filledLiters > maxFillableLiters;
 
@@ -675,6 +688,14 @@ function VehicleModal({ close, addVehicle }) {
     e.preventDefault();
     const entry = Object.fromEntries(new FormData(e.currentTarget));
     entry.tankCapacity = Number(entry.tankCapacity || 50);
+    entry.currentFuelLevel = Number(entry.currentFuelLevel || 25);
+    entry.currentFuelOdometer = Number(entry.initialOdometer || 0);
+
+    if (entry.currentFuelLevel > entry.tankCapacity) {
+      alert("Current fuel level cannot exceed tank capacity!");
+      return;
+    }
+
     addVehicle(entry);
   }
   return <div className="modal-wrap" role="presentation" onMouseDown={close}>
@@ -686,9 +707,13 @@ function VehicleModal({ close, addVehicle }) {
         <div className="form-grid"><label>Vehicle type<CustomSelect name="type" options={["Car", "Motorcycle", "Scooter", "Truck"]} /></label><label>Fuel type<CustomSelect name="fuel" options={["Petrol", "Diesel", "CNG", "LPG"]} /></label></div>
         <div className="form-grid">
           <label>Tank capacity (L)<input name="tankCapacity" type="number" min="1" placeholder="45" defaultValue="45" required /></label>
-          <label>Home city<input name="city" placeholder="Bangalore" required /></label>
+          <label>Current fuel level (L)<input name="currentFuelLevel" type="number" min="0" step="0.1" placeholder="20" defaultValue="20" required /></label>
         </div>
-        <small className="field-help" style={{ marginTop: "-6px", display: "block" }}>Home city is used to select your daily fuel rate. Tank capacity prevents refilling beyond tank space.</small>
+        <div className="form-grid">
+          <label>Home city<input name="city" placeholder="Bangalore" required /></label>
+          <div style={{ display: "none" }}></div>
+        </div>
+        <small className="field-help" style={{ marginTop: "-6px", display: "block" }}>Home city is used to select your daily fuel rate. Tank capacity and current fuel prevent refilling beyond tank limits.</small>
         <footer><button type="button" className="btn ghost" onClick={close}>Cancel</button><button className="btn primary"><Plus size={17}/>Add vehicle</button></footer>
       </form>
     </section>
@@ -814,17 +839,28 @@ function Header({ active, setDark, dark, setModal, setMenu, vehicle, notificatio
   const fuelInfo = useMemo(() => {
     if (!vehicle) return null;
     const tankCapacity = Number(vehicle.tankCapacity || 50);
+    const initialFuel = Number(vehicle.currentFuelLevel ?? (tankCapacity * 0.75));
+    const initialOdo = Number(vehicle.currentFuelOdometer ?? vehicle.initialOdometer ?? 0);
+
     const fuelRefills = [...(records?.fuel || [])].sort((a, b) => Number(b.odometer) - Number(a.odometer));
-    if (fuelRefills.length === 0) {
-      return { percentage: 75, level: tankCapacity * 0.75, capacity: tankCapacity };
+    
+    let baselineFuel = initialFuel;
+    let baselineOdo = initialOdo;
+    
+    if (fuelRefills.length > 0) {
+      const lastRefill = fuelRefills[0];
+      const refillOdo = Number(lastRefill.odometer || 0);
+      if (refillOdo > initialOdo) {
+        baselineFuel = tankCapacity; // Assume tank was filled to capacity
+        baselineOdo = refillOdo;
+      }
     }
-    const lastRefill = fuelRefills[0];
-    const lastOdometer = Number(lastRefill.odometer || 0);
-    const currentOdometer = Number(stats?.currentOdometer || lastOdometer);
-    const distanceSinceRefuel = Math.max(0, currentOdometer - lastOdometer);
+
+    const currentOdometer = Number(stats?.currentOdometer || baselineOdo);
+    const distance = Math.max(0, currentOdometer - baselineOdo);
     const averageMileage = Number(stats?.mileage || 15);
-    const consumed = averageMileage > 0 ? distanceSinceRefuel / averageMileage : 0;
-    const level = Math.max(0, tankCapacity - consumed);
+    const consumed = averageMileage > 0 ? distance / averageMileage : 0;
+    const level = Math.max(0, baselineFuel - consumed);
     const percentage = Math.min(100, Math.max(0, Math.round((level / tankCapacity) * 100)));
     return { percentage, level, capacity: tankCapacity };
   }, [vehicle, records?.fuel, stats]);
@@ -1153,7 +1189,7 @@ function tableForPage(active) {
   return "";
 }
 
-function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh, vehicle, enableAi, setEnableAi, enablePriceFetch, setEnablePriceFetch, geminiApiKey, setGeminiApiKey, fuelApiKey, setFuelApiKey }) {
+function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh, vehicle, enableAi, setEnableAi, enablePriceFetch, setEnablePriceFetch, geminiApiKey, setGeminiApiKey, fuelApiKey, setFuelApiKey, stats }) {
   const totalLogs = allRecords.fuel.length + allRecords.trips.length + allRecords.maintenance.length + allRecords.expenses.length + allRecords.schedules.length;
   const configured = Boolean(import.meta.env.VITE_FUEL_API_BASE_URL && (fuelApiKey || import.meta.env.VITE_FUEL_API_KEY));
   const rows = [
@@ -1162,6 +1198,39 @@ function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh
     ["Vehicle profile", vehicle ? `${vehicle.name} - ${vehicle.registration}` : "No vehicle profile", Boolean(vehicle)],
     ["Saved logs", `${totalLogs} local record${totalLogs === 1 ? "" : "s"}`, totalLogs > 0],
   ];
+
+  const [tempTankCapacity, setTempTankCapacity] = useState(vehicle?.tankCapacity || 45);
+  const [tempCurrentFuelLevel, setTempCurrentFuelLevel] = useState(vehicle?.currentFuelLevel || 20);
+
+  useEffect(() => {
+    setTempTankCapacity(vehicle?.tankCapacity || 45);
+    setTempCurrentFuelLevel(vehicle?.currentFuelLevel || 20);
+  }, [vehicle]);
+
+  const handleUpdateFuel = () => {
+    if (!vehicle) return;
+    const capacity = Number(tempTankCapacity || 50);
+    const fuelLvl = Number(tempCurrentFuelLevel || 25);
+    if (fuelLvl > capacity) {
+      alert("Current fuel level cannot exceed tank capacity!");
+      return;
+    }
+
+    const updatedVehicle = {
+      ...vehicle,
+      tankCapacity: capacity,
+      currentFuelLevel: fuelLvl,
+      currentFuelOdometer: Number(stats?.currentOdometer || vehicle.initialOdometer || 0)
+    };
+
+    const list = vehicles.map(v => v.name === vehicle.name ? updatedVehicle : v);
+    localStorage.setItem("vehiclelog-v6-vehicles", JSON.stringify(list));
+    localStorage.setItem("vehiclelog-v6-active-vehicle", JSON.stringify(updatedVehicle));
+    localStorage.setItem("vehiclelog-v6-vehicle", JSON.stringify(updatedVehicle));
+    setVehicles(list);
+    setVehicle(updatedVehicle);
+    alert("Fuel configuration updated successfully!");
+  };
 
   const [exportVehicle, setExportVehicle] = useState("all");
   const fileInputRef = useRef(null);
@@ -1322,7 +1391,44 @@ function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh
   return <div className="settings-grid">
     <article className="setting-card"><div><ShieldCheck size={18}/><span className="eyebrow">Privacy</span><h3>Local-first data</h3></div><p>Your vehicle, fuel, travel, expense, and schedule logs are stored locally in this browser. The fuel API is only called when you create a fuel refill.</p></article>
     
-    <article className="setting-card"><div><Fuel size={18}/><span className="eyebrow">Fuel</span><h3>Daily price fetch</h3></div><p>IndianAPI is configured through environment variables or settings overrides so the base URL and key can be replaced dynamically.</p></article>
+    <article className="setting-card">
+      <div>
+        <Fuel size={18}/>
+        <span className="eyebrow">Garage</span>
+        <h3>Fuel Configuration</h3>
+      </div>
+      <p style={{ marginBottom: "12px" }}>Update your vehicle's physical fuel tank specifications and adjust current levels.</p>
+      {vehicle ? (
+        <div style={{ display: "flex", gap: "8px", flexDirection: "column" }}>
+          <label style={{ fontSize: "10px", fontWeight: "700", color: "#687679", display: "grid", gap: "4px" }}>
+            Tank Capacity (Liters)
+            <input
+              type="number"
+              min="1"
+              value={tempTankCapacity}
+              onChange={(e) => setTempTankCapacity(e.target.value)}
+              style={{ height: "39px", padding: "0 10px", border: "1px solid #e3dfd7", borderRadius: "8px", background: "white", fontSize: "12px" }}
+            />
+          </label>
+          <label style={{ fontSize: "10px", fontWeight: "700", color: "#687679", display: "grid", gap: "4px" }}>
+            Current Fuel in Tank (Liters)
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              value={tempCurrentFuelLevel}
+              onChange={(e) => setTempCurrentFuelLevel(e.target.value)}
+              style={{ height: "39px", padding: "0 10px", border: "1px solid #e3dfd7", borderRadius: "8px", background: "white", fontSize: "12px" }}
+            />
+          </label>
+          <button type="button" className="btn primary" onClick={handleUpdateFuel} style={{ marginTop: "8px" }}>
+            Save Configuration
+          </button>
+        </div>
+      ) : (
+        <p style={{ color: "#849092", fontStyle: "italic" }}>No active vehicle profile to configure.</p>
+      )}
+    </article>
     
     <article className="setting-card">
       <div>
@@ -1760,7 +1866,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
   ];
 
   return <section className="secondary-page">
-    {isSettings ? <SettingsPage allRecords={allRecords} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} onRefresh={onRefresh} vehicle={vehicle} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey}/> : <>
+    {isSettings ? <SettingsPage allRecords={allRecords} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} onRefresh={onRefresh} vehicle={vehicle} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} stats={stats}/> : <>
       <div className="secondary-toolbar" style={{ display: "flex", gap: "8px", padding: "17px 0", alignItems: "center" }}>
         
         {active === "Schedule" && (
@@ -2524,7 +2630,29 @@ export default function App() {
     const { activity, ...record } = entry;
     const table = type === "service" ? "maintenance" : type;
     setRecords((currentRecords) => ({ ...currentRecords, [table]: [...currentRecords[table], record] }));
-    if (type === "fuel") setFuelEntries((currentEntries) => [...currentEntries, record]);
+    if (type === "fuel") {
+      setFuelEntries((currentEntries) => [...currentEntries, record]);
+      if (vehicle) {
+        const tankCapacity = Number(vehicle.tankCapacity || 50);
+        const initialFuel = Number(vehicle.currentFuelLevel ?? (tankCapacity * 0.75));
+        const initialOdo = Number(vehicle.currentFuelOdometer ?? vehicle.initialOdometer ?? 0);
+        const averageMileage = Number(stats?.mileage || 15);
+
+        const refuelOdo = Number(record.odometer || 0);
+        const distance = Math.max(0, refuelOdo - initialOdo);
+        const consumed = averageMileage > 0 ? distance / averageMileage : 0;
+        const fuelBefore = Math.max(0, initialFuel - consumed);
+        const litersFilled = Number(record.liters || 0);
+        const newFuelLevel = Math.min(tankCapacity, fuelBefore + litersFilled);
+        
+        const updatedVehicle = {
+          ...vehicle,
+          currentFuelLevel: newFuelLevel,
+          currentFuelOdometer: refuelOdo
+        };
+        updateVehicle(updatedVehicle);
+      }
+    }
   }
 
   async function saveRecordUpdate(table, id, entry) {
