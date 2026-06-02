@@ -39,12 +39,12 @@ Provide only the raw JSON. Do not include markdown code block formatting. Just t
 Today's date is: ${new Date().toISOString().slice(0, 10)}.`;
 
 export async function parseInputWithAI(inputString) {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const apiKey = localStorage.getItem("vehiclelog-v6-gemini-api-key") || import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("Gemini API key is not configured in .env. Please configure VITE_GEMINI_API_KEY.");
+    throw new Error("Gemini API key is not configured. Please configure it in Settings or set VITE_GEMINI_API_KEY in .env.");
   }
   
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
   const response = await fetch(url, {
     method: "POST",
     headers: {

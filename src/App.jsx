@@ -221,10 +221,51 @@ function CustomDatePicker({ name, defaultValue, onChange }) {
         <CalendarDays size={16} className="arrow" style={{ color: "#e66b2e" }} />
       </button>
       {isOpen && (
-        <div className="custom-select-options calendar-dropdown" style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, left: "auto", width: "270px", padding: "10px", zIndex: 1000 }}>
+        <div className="calendar-dropdown" style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, left: "auto", width: "270px", padding: "10px", zIndex: 1000 }}>
           <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
             <button type="button" className="btn ghost" style={{ padding: "4px 8px", border: "1px solid #e3dfd7", borderRadius: "6px" }} onClick={prevMonth}>&lt;</button>
-            <span style={{ fontSize: "12px", fontWeight: "bold" }}>{monthNames[month]} {year}</span>
+            <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+              <select 
+                value={month} 
+                onChange={(e) => setViewDate(new Date(year, Number(e.target.value), 1))}
+                style={{ 
+                  background: "transparent", 
+                  border: 0, 
+                  fontWeight: "bold", 
+                  fontSize: "12px", 
+                  cursor: "pointer", 
+                  outline: "none", 
+                  color: "inherit",
+                  padding: "2px",
+                  borderRadius: "4px"
+                }}
+                className="calendar-header-select"
+              >
+                {monthNames.map((name, idx) => (
+                  <option key={name} value={idx}>{name}</option>
+                ))}
+              </select>
+              <select 
+                value={year} 
+                onChange={(e) => setViewDate(new Date(Number(e.target.value), month, 1))}
+                style={{ 
+                  background: "transparent", 
+                  border: 0, 
+                  fontWeight: "bold", 
+                  fontSize: "12px", 
+                  cursor: "pointer", 
+                  outline: "none", 
+                  color: "inherit",
+                  padding: "2px",
+                  borderRadius: "4px"
+                }}
+                className="calendar-header-select"
+              >
+                {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - 15 + i).map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
             <button type="button" className="btn ghost" style={{ padding: "4px 8px", border: "1px solid #e3dfd7", borderRadius: "6px" }} onClick={nextMonth}>&gt;</button>
           </header>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "10px", fontWeight: "bold", color: "#849092", marginBottom: "4px" }}>
@@ -299,7 +340,7 @@ function Donut({ fuel = 0, service = 0, travel = 0, other = 0 }) {
   </svg>;
 }
 
-function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVehicleUpdate, initialType = null, onScheduleSaved }) {
+function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVehicleUpdate, initialType = null, onScheduleSaved, enableAi, enablePriceFetch }) {
   const [type, setType] = useState(null);
   const [saving, setSaving] = useState(false);
   const [amount, setAmount] = useState("");
@@ -343,7 +384,13 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
   const liters = amount && price ? preview.liters.toFixed(2) : "";
 
   useEffect(() => {
-    if (type !== "fuel" || !fuelCity.trim()) return;
+    if (type !== "fuel" || !fuelCity.trim() || !enablePriceFetch) {
+      if (type === "fuel" && !enablePriceFetch) {
+        setPriceStatus("Manual price entry active.");
+        setAutoPrice(false);
+      }
+      return;
+    }
     setPriceStatus("Waiting for typing to stop...");
     const timer = setTimeout(() => {
       setPriceStatus("Fetching today's INR price...");
@@ -364,7 +411,7 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
         });
     }, 600);
     return () => clearTimeout(timer);
-  }, [type, fuelCity, vehicle.fuel]);
+  }, [type, fuelCity, vehicle.fuel, enablePriceFetch]);
 
   const handleAiFill = async () => {
     if (!aiInput.trim()) return;
@@ -452,26 +499,28 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
       <header><div><span className="eyebrow">Quick add</span><h2>Log a new record</h2></div><IconButton label="Close" onClick={close}><X size={18}/></IconButton></header>
       
       {/* AI Quick Fill Input */}
-      <div style={{ display: "flex", gap: "8px", marginTop: "14px", marginBottom: "6px", background: "#f5f3ef", padding: "8px", borderRadius: "8px" }} className="theme-toggle-bg">
-        <input 
-          placeholder="Describe entry with AI (e.g., 50L petrol at Bangalore, commute daily to Work at 9am)..." 
-          value={aiInput} 
-          onChange={(e) => setAiInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAiFill(); } }}
-          style={{ flex: 1, border: "1px solid #e3dfd7", borderRadius: "8px", padding: "0 10px", height: "36px", background: "white", fontSize: "11px" }}
-          disabled={aiLoading}
-        />
-        <button 
-          type="button" 
-          className="btn primary" 
-          onClick={handleAiFill} 
-          disabled={aiLoading || !aiInput.trim()}
-          style={{ height: "36px", padding: "0 12px", fontSize: "11px" }}
-        >
-          {aiLoading ? "Analyzing..." : "Fill with AI"}
-        </button>
-      </div>
-      {aiError && <div style={{ color: "#c74830", fontSize: "10px", fontWeight: "bold", marginBottom: "8px" }}>{aiError}</div>}
+      {enableAi && (
+        <div style={{ display: "flex", gap: "8px", marginTop: "14px", marginBottom: "6px", background: "#f5f3ef", padding: "8px", borderRadius: "8px" }} className="theme-toggle-bg">
+          <input 
+            placeholder="Describe entry with AI (e.g., 50L petrol at Bangalore, commute daily to Work at 9am)..." 
+            value={aiInput} 
+            onChange={(e) => setAiInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAiFill(); } }}
+            style={{ flex: 1, border: "1px solid #e3dfd7", borderRadius: "8px", padding: "0 10px", height: "36px", background: "white", fontSize: "11px" }}
+            disabled={aiLoading}
+          />
+          <button 
+            type="button" 
+            className="btn primary" 
+            onClick={handleAiFill} 
+            disabled={aiLoading || !aiInput.trim()}
+            style={{ height: "36px", padding: "0 12px", fontSize: "11px" }}
+          >
+            {aiLoading ? "Analyzing..." : "Fill with AI"}
+          </button>
+        </div>
+      )}
+      {enableAi && aiError && <div style={{ color: "#c74830", fontSize: "10px", fontWeight: "bold", marginBottom: "8px" }}>{aiError}</div>}
 
       <div className="record-types">
         {Object.entries(labels).map(([key, [label, Icon]]) => <button key={key} className={type === key ? "active" : ""} onClick={() => setType(key)}><Icon size={17}/>{label}</button>)}
@@ -490,7 +539,7 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
           <label>Fuel-price city<input name="fuelCity" placeholder="Bangalore" value={fuelCity} onChange={(e) => setFuelCity(e.target.value)} required /><small className="field-help">Matched against the IndianAPI city list. Saved to your vehicle after this refill.</small></label>
           <div className="form-grid">
             <label>Amount paid (INR)<input name="amount" type="number" min="0" step="0.01" placeholder="2500" value={amount} onChange={(e) => setAmount(e.target.value)} onWheel={(e) => e.target.blur()} required /></label>
-            <label>{vehicle.fuel} price (INR/L)<input name="pricePerLiter" type="number" min="0" step="0.01" placeholder="Fetching today's rate..." value={price} onChange={(e) => setPrice(e.target.value)} onWheel={(e) => e.target.blur()} readOnly={autoPrice} required /></label>
+            <label>{vehicle.fuel} price (INR/L)<input name="pricePerLiter" type="number" min="0" step="0.01" placeholder="Fetching today's rate..." value={price} onChange={(e) => setPrice(e.target.value)} onWheel={(e) => e.target.blur()} readOnly={autoPrice && enablePriceFetch} required /></label>
           </div>
           <div className="fuel-calc"><Fuel size={16}/><div><b>{liters || "0.00"} liters</b><small>{priceStatus}</small></div></div>
         </>}
@@ -929,11 +978,11 @@ function tableForPage(active) {
   return "";
 }
 
-function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh, vehicle }) {
+function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh, vehicle, enableAi, setEnableAi, enablePriceFetch, setEnablePriceFetch, geminiApiKey, setGeminiApiKey, fuelApiKey, setFuelApiKey }) {
   const totalLogs = allRecords.fuel.length + allRecords.trips.length + allRecords.maintenance.length + allRecords.expenses.length + allRecords.schedules.length;
-  const configured = Boolean(import.meta.env.VITE_FUEL_API_BASE_URL && import.meta.env.VITE_FUEL_API_KEY);
+  const configured = Boolean(import.meta.env.VITE_FUEL_API_BASE_URL && (fuelApiKey || import.meta.env.VITE_FUEL_API_KEY));
   const rows = [
-    ["Fuel price API", configured ? "Configured from environment" : "Add API base URL and key in .env", configured],
+    ["Fuel price API", configured ? "Configured and active" : "Add API base URL and key in settings or .env", configured],
     ["Local storage", "Records stay in this browser on this device", true],
     ["Vehicle profile", vehicle ? `${vehicle.name} - ${vehicle.registration}` : "No vehicle profile", Boolean(vehicle)],
     ["Saved logs", `${totalLogs} local record${totalLogs === 1 ? "" : "s"}`, totalLogs > 0],
@@ -1097,8 +1146,79 @@ function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh
 
   return <div className="settings-grid">
     <article className="setting-card"><div><ShieldCheck size={18}/><span className="eyebrow">Privacy</span><h3>Local-first data</h3></div><p>Your vehicle, fuel, travel, expense, and schedule logs are stored locally in this browser. The fuel API is only called when you create a fuel refill.</p></article>
-    <article className="setting-card"><div><Fuel size={18}/><span className="eyebrow">Fuel</span><h3>Daily price fetch</h3></div><p>IndianAPI is configured through environment variables so the base URL and key can be replaced without touching the app code.</p></article>
     
+    <article className="setting-card"><div><Fuel size={18}/><span className="eyebrow">Fuel</span><h3>Daily price fetch</h3></div><p>IndianAPI is configured through environment variables or settings overrides so the base URL and key can be replaced dynamically.</p></article>
+    
+    <article className="setting-card">
+      <div>
+        <Settings size={18}/>
+        <span className="eyebrow">Features</span>
+        <h3>Feature Toggles</h3>
+      </div>
+      <p style={{ marginBottom: "12px" }}>Toggle modern app capabilities on or off to match your preference.</p>
+      <div style={{ display: "grid", gap: "10px" }}>
+        <div className="setting-row" style={{ cursor: "pointer", borderTop: 0 }} onClick={() => {
+          const next = !enableAi;
+          setEnableAi(next);
+          localStorage.setItem("vehiclelog-v6-enable-ai", String(next));
+        }}>
+          <div>
+            <b>AI Quick Add Parser</b>
+            <small>Enable Gemini-powered description logs</small>
+          </div>
+          <span className={`switch ${enableAi ? "on" : ""}`}><i></i></span>
+        </div>
+        <div className="setting-row" style={{ cursor: "pointer" }} onClick={() => {
+          const next = !enablePriceFetch;
+          setEnablePriceFetch(next);
+          localStorage.setItem("vehiclelog-v6-enable-price-fetch", String(next));
+        }}>
+          <div>
+            <b>Live Fuel Price Fetch</b>
+            <small>Query Indian Oil prices for your city</small>
+          </div>
+          <span className={`switch ${enablePriceFetch ? "on" : ""}`}><i></i></span>
+        </div>
+      </div>
+    </article>
+
+    <article className="setting-card">
+      <div>
+        <ShieldCheck size={18}/>
+        <span className="eyebrow">API Keys</span>
+        <h3>Developer Credentials</h3>
+      </div>
+      <p style={{ marginBottom: "12px" }}>Configure custom keys to bypass standard environment quotas or fallback limits.</p>
+      <div style={{ display: "flex", gap: "8px", flexDirection: "column" }}>
+        <label style={{ fontSize: "10px", fontWeight: "700", color: "#687679", display: "grid", gap: "4px" }}>
+          Gemini API Key
+          <input
+            type="password"
+            placeholder={(import.meta.env.VITE_GEMINI_API_KEY || geminiApiKey) ? "Configured (click to override)" : "Enter Gemini API Key"}
+            value={geminiApiKey}
+            onChange={(e) => {
+              setGeminiApiKey(e.target.value);
+              localStorage.setItem("vehiclelog-v6-gemini-api-key", e.target.value);
+            }}
+            style={{ height: "39px", padding: "0 10px", border: "1px solid #e3dfd7", borderRadius: "8px", background: "white", fontSize: "12px" }}
+          />
+        </label>
+        <label style={{ fontSize: "10px", fontWeight: "700", color: "#687679", display: "grid", gap: "4px" }}>
+          Fuel Price API Key
+          <input
+            type="password"
+            placeholder={(import.meta.env.VITE_FUEL_API_KEY || fuelApiKey) ? "Configured (click to override)" : "Enter Fuel API Key"}
+            value={fuelApiKey}
+            onChange={(e) => {
+              setFuelApiKey(e.target.value);
+              localStorage.setItem("vehiclelog-v6-fuel-api-key", e.target.value);
+            }}
+            style={{ height: "39px", padding: "0 10px", border: "1px solid #e3dfd7", borderRadius: "8px", background: "white", fontSize: "12px" }}
+          />
+        </label>
+      </div>
+    </article>
+
     <article className="setting-card">
       <div>
         <Download size={18}/>
@@ -1234,7 +1354,7 @@ function LogDetailModal({ active, record, close, onSave, onDelete }) {
   );
 }
 
-function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehicles, setVehicles, setVehicle, allRecords, allFuelEntries, stats, skippedSchedules, onOpenScheduleDetails, onRefresh }) {
+function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehicles, setVehicles, setVehicle, allRecords, allFuelEntries, stats, skippedSchedules, onOpenScheduleDetails, onRefresh, enableAi, setEnableAi, enablePriceFetch, setEnablePriceFetch, geminiApiKey, setGeminiApiKey, fuelApiKey, setFuelApiKey }) {
   const [title, description] = pages[active] || ["Settings", "Tune the experience to match your vehicle life."];
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem(`vehiclelog-v6-viewmode-${active}`) || "list";
@@ -1465,7 +1585,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
   ];
 
   return <section className="secondary-page">
-    {isSettings ? <SettingsPage allRecords={allRecords} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} onRefresh={onRefresh} vehicle={vehicle}/> : <>
+    {isSettings ? <SettingsPage allRecords={allRecords} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} onRefresh={onRefresh} vehicle={vehicle} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey}/> : <>
       <div className="secondary-toolbar" style={{ display: "flex", gap: "8px", padding: "17px 0", alignItems: "center" }}>
         
         {active === "Schedule" && (
@@ -1885,7 +2005,28 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
     <div style={{ display: "grid", gap: "20px", marginTop: "10px" }}>
       <div className="panel" style={{ padding: "20px" }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "bold" }}>{monthNames[month]} {year}</h3>
+          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+            <select 
+              value={month} 
+              onChange={(e) => setCurrentDate(new Date(year, Number(e.target.value), 1))}
+              className="calendar-header-select"
+              style={{ fontSize: "16px" }}
+            >
+              {monthNames.map((name, idx) => (
+                <option key={name} value={idx}>{name}</option>
+              ))}
+            </select>
+            <select 
+              value={year} 
+              onChange={(e) => setCurrentDate(new Date(Number(e.target.value), month, 1))}
+              className="calendar-header-select"
+              style={{ fontSize: "16px" }}
+            >
+              {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - 15 + i).map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
           <div style={{ display: "flex", gap: "8px" }}>
             <button type="button" className="btn ghost" onClick={prevMonth} style={{ padding: "6px 12px" }}>&lt; Prev</button>
             <button type="button" className="btn ghost" onClick={nextMonth} style={{ padding: "6px 12px" }}>Next &gt;</button>
@@ -2010,6 +2151,21 @@ export default function App() {
   const [modal, setModal] = useState(false);
   const [dark, setDark] = useState(false);
   const [menu, setMenu] = useState(false);
+
+  const [enableAi, setEnableAi] = useState(() => {
+    const val = localStorage.getItem("vehiclelog-v6-enable-ai");
+    return val !== "false";
+  });
+  const [enablePriceFetch, setEnablePriceFetch] = useState(() => {
+    const val = localStorage.getItem("vehiclelog-v6-enable-price-fetch");
+    return val !== "false";
+  });
+  const [geminiApiKey, setGeminiApiKey] = useState(() => {
+    return localStorage.getItem("vehiclelog-v6-gemini-api-key") || "";
+  });
+  const [fuelApiKey, setFuelApiKey] = useState(() => {
+    return localStorage.getItem("vehiclelog-v6-fuel-api-key") || "";
+  });
 
   const [vehicles, setVehicles] = useState(() => {
     const storedVehicles = localStorage.getItem("vehiclelog-v6-vehicles");
@@ -2281,8 +2437,8 @@ export default function App() {
 
   return <div className={`app ${dark ? "dark" : ""}`}>
     <Sidebar active={current} setActive={setActive} open={menu} setOpen={setMenu} vehicle={vehicle} vehicles={vehicles} setVehicle={setVehicle} setVehicleModal={setVehicleModal}/>
-    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setNotificationsModal={setNotificationsModal}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} />}</div></main>
-    {modal && <Modal close={() => setModal(false)} setActivities={() => {}} vehicle={vehicle} fuelEntries={activeFuelEntries} onRecordSaved={addRecord} onVehicleUpdate={updateVehicle} initialType={modal === true ? null : modal} onScheduleSaved={addSchedule}/>}
+    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setNotificationsModal={setNotificationsModal}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} />}</div></main>
+    {modal && <Modal close={() => setModal(false)} setActivities={() => {}} vehicle={vehicle} fuelEntries={activeFuelEntries} onRecordSaved={addRecord} onVehicleUpdate={updateVehicle} initialType={modal === true ? null : modal} onScheduleSaved={addSchedule} enableAi={enableAi} enablePriceFetch={enablePriceFetch} />}
     {detail && <LogDetailModal active={detail.page} record={detail.record} close={() => setDetail(null)} onSave={saveRecordUpdate} onDelete={deleteRecord}/>}
     {vehicleModal && <VehicleModal close={() => setVehicleModal(false)} addVehicle={addVehicle}/>}
     {scheduleDetail && <ScheduleDetailsModal schedule={scheduleDetail.schedule} dateStr={scheduleDetail.dateStr} isCompleted={scheduleDetail.isCompleted} isSkipped={scheduleDetail.isSkipped} close={() => setScheduleDetail(null)} onAccept={handleLogTripFromSchedule} onSkip={handleSkipSchedule} />}

@@ -160,11 +160,44 @@ input[type=number] {
   border-radius: 8px;
   box-shadow: 0 10px 25px rgba(13, 28, 32, 0.12);
   color: #415155;
+  overflow: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.calendar-dropdown::-webkit-scrollbar {
+  display: none;
 }
 .dark .calendar-dropdown {
   background: #22353b;
   border-color: #3b5155;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+  color: #c9d5d4;
+}
+
+/* Styled selects for calendar headers */
+.calendar-header-select {
+  background: transparent;
+  border: 0;
+  font-weight: bold;
+  cursor: pointer;
+  outline: none;
+  color: inherit;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+.calendar-header-select:hover {
+  background: #eeeae4;
+}
+.dark .calendar-header-select:hover {
+  background: #3b5155;
+}
+.calendar-header-select option {
+  background: #fcfbf8;
+  color: #415155;
+}
+.dark .calendar-header-select option {
+  background: #22353b;
   color: #c9d5d4;
 }
 .calendar-day:hover {

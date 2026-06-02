@@ -1,6 +1,9 @@
 const BASE_URL = (import.meta.env.VITE_FUEL_API_BASE_URL || "https://fuel.indianapi.in").replace(/\/$/, "");
-const API_KEY = import.meta.env.VITE_FUEL_API_KEY;
 const CACHE_PREFIX = "vehiclelog-fuel-prices";
+
+function getApiKey() {
+  return localStorage.getItem("vehiclelog-v6-fuel-api-key") || import.meta.env.VITE_FUEL_API_KEY || "";
+}
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -34,7 +37,8 @@ function findCityPrice(prices, city) {
 }
 
 export async function fetchDailyFuelPrice(fuelType, city) {
-  if (!API_KEY) throw new Error("Fuel API key is not configured.");
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("Fuel API key is not configured.");
   const key = getCacheKey(fuelType);
   let prices;
   let cached = false;
@@ -46,7 +50,7 @@ export async function fetchDailyFuelPrice(fuelType, city) {
     cached = true;
   } else {
     const url = `${BASE_URL}/live_fuel_price?fuel_type=${encodeURIComponent(fuelType.toLowerCase())}&location_type=city`;
-    const response = await fetch(url, { headers: { "x-api-key": API_KEY } });
+    const response = await fetch(url, { headers: { "x-api-key": apiKey } });
     if (!response.ok) throw new Error(`Fuel price service returned ${response.status}.`);
     prices = parsePrices(await response.json());
     if (!prices.length) throw new Error("Fuel price service returned no usable city rates.");
