@@ -1798,7 +1798,7 @@ function LogDetailModal({ active, record, close, onSave, onDelete, activeVehicle
   );
 }
 
-function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehicles, setVehicles, setVehicle, allRecords, allFuelEntries, stats, skippedSchedules, onOpenScheduleDetails, onRefresh, enableAi, setEnableAi, enablePriceFetch, setEnablePriceFetch, geminiApiKey, setGeminiApiKey, fuelApiKey, setFuelApiKey, username, setUsername }) {
+function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehicles, setVehicles, setVehicle, allRecords, allFuelEntries, stats, skippedSchedules, onOpenScheduleDetails, onRefresh, enableAi, setEnableAi, enablePriceFetch, setEnablePriceFetch, geminiApiKey, setGeminiApiKey, fuelApiKey, setFuelApiKey, username, setUsername, users = [], setUsers = () => {}, setVehicleModal = () => {} }) {
   const [title, description] = pages[active] || ["Settings", "Tune the experience to match your vehicle life."];
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem(`vehiclelog-v6-viewmode-${active}`) || "list";
@@ -2155,6 +2155,92 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
           )}
         </div>
       </div>
+
+      {isVehicles && (
+        <div className="panel" style={{ padding: "20px", marginBottom: "16px", display: "grid", gap: "16px" }}>
+          <div>
+            <h4 style={{ margin: "0 0 8px 0", fontSize: "11px", fontWeight: "bold", color: "#819495", textTransform: "uppercase", letterSpacing: "0.5px" }}>Driver Account</h4>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+              {users.map((u) => {
+                const isActive = u === username;
+                return (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => {
+                      localStorage.setItem("vehiclelog-v6-username", u);
+                      setUsername(u);
+                    }}
+                    className={`btn ${isActive ? "primary" : "ghost"}`}
+                    style={{ padding: "6px 12px", height: "auto", fontSize: "12px", display: "flex", gap: "6px", alignItems: "center" }}
+                  >
+                    <User size={13} />
+                    <span>{u}</span>
+                    {isActive && <CheckCircle2 size={13} style={{ color: "white" }} />}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => {
+                  const newName = prompt("Enter new account/driver name:");
+                  if (newName && newName.trim()) {
+                    const trimmed = newName.trim();
+                    const updatedUsers = [...new Set([...users, trimmed])];
+                    localStorage.setItem("vehiclelog-v6-users", JSON.stringify(updatedUsers));
+                    localStorage.setItem("vehiclelog-v6-username", trimmed);
+                    setUsers(updatedUsers);
+                    setUsername(trimmed);
+                  }
+                }}
+                style={{ padding: "6px 12px", height: "auto", fontSize: "12px", borderStyle: "dashed" }}
+              >
+                <Plus size={13} />
+                <span>Add Account</span>
+              </button>
+            </div>
+          </div>
+
+          <div style={{ borderTop: "1px solid #eeeae4", paddingTop: "14px" }} className="dark-border-top">
+            <h4 style={{ margin: "0 0 8px 0", fontSize: "11px", fontWeight: "bold", color: "#819495", textTransform: "uppercase", letterSpacing: "0.5px" }}>Active Vehicle</h4>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+              {vehicles.map((v) => {
+                const isActive = v.name === vehicle?.name;
+                return (
+                  <button
+                    key={v.name}
+                    type="button"
+                    onClick={() => {
+                      localStorage.setItem("vehiclelog-v6-active-vehicle", JSON.stringify(v));
+                      localStorage.setItem("vehiclelog-v6-vehicle", JSON.stringify(v));
+                      setVehicle(v);
+                    }}
+                    className={`btn ${isActive ? "primary" : "ghost"}`}
+                    style={{ padding: "6px 12px", height: "auto", fontSize: "12px", display: "flex", gap: "6px", alignItems: "center" }}
+                  >
+                    <Car size={13} />
+                    <div style={{ textAlign: "left" }}>
+                      <span style={{ display: "block" }}>{v.name}</span>
+                      <small style={{ display: "block", fontSize: "8px", opacity: 0.8 }}>{v.registration || "No registration"}</small>
+                    </div>
+                    {isActive && <CheckCircle2 size={13} style={{ color: "white" }} />}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => setVehicleModal(true)}
+                style={{ padding: "6px 12px", height: "auto", fontSize: "12px", borderStyle: "dashed" }}
+              >
+                <Plus size={13} />
+                <span>Add Vehicle</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {schedule && scheduleView === "calendar" ? (
         <CalendarScheduleView
@@ -2909,7 +2995,7 @@ export default function App() {
 
   return <div className={`app ${dark ? "dark" : ""}`}>
     <Sidebar active={current} setActive={setActive} open={menu} setOpen={setMenu} vehicle={vehicle} vehicles={vehicles} setVehicle={setVehicle} setVehicleModal={setVehicleModal} username={username} setUsername={setUsername} users={users} setUsers={setUsers}/>
-    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setScheduleDetail={setScheduleDetail} records={activeRecords} stats={stats} username={username} /><div className="content-body">{!vehicle ? <Welcome username={username} setUsername={setUsername} users={users} setUsers={setUsers} addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} username={username} setUsername={setUsername} />}</div></main>
+    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setScheduleDetail={setScheduleDetail} records={activeRecords} stats={stats} username={username} /><div className="content-body">{!vehicle ? <Welcome username={username} setUsername={setUsername} users={users} setUsers={setUsers} addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} username={username} setUsername={setUsername} users={users} setUsers={setUsers} setVehicleModal={setVehicleModal} />}</div></main>
     {modal && <Modal close={() => setModal(false)} setActivities={() => {}} vehicle={vehicle} fuelEntries={activeFuelEntries} onRecordSaved={addRecord} onVehicleUpdate={updateVehicle} initialType={modal === true ? null : modal} onScheduleSaved={addSchedule} enableAi={enableAi} enablePriceFetch={enablePriceFetch} stats={stats} />}
     {detail && <LogDetailModal active={detail.page} record={detail.record} close={() => setDetail(null)} onSave={saveRecordUpdate} onDelete={deleteRecord} activeVehicle={vehicle} onSetVehicleActive={(v) => {
       localStorage.setItem("vehiclelog-v6-active-vehicle", JSON.stringify(v));
