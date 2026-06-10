@@ -4,7 +4,7 @@ import {
   CalendarDays, Car, CheckCircle2, ChevronDown, CircleDollarSign, Clock3,
   Download, Droplets, Fuel, Gauge, Grid2X2, LayoutDashboard, List, MapPin, Menu,
   Moon, MoreHorizontal, Plus, ReceiptText, Search, Settings, ShieldCheck,
-  Sparkles, Sun, Table, Trash2, TrendingUp, Upload, Wrench, X, Zap,
+  Sparkles, Sun, Table, Trash2, TrendingUp, Upload, User, Wrench, X, Zap,
 } from "lucide-react";
 import { db, deleteEntry, getEntries, getFuelEntries, saveEntry, updateEntry } from "./db";
 import { fetchDailyFuelPrice } from "./fuelPrice";
@@ -38,7 +38,6 @@ const nav = [
   ["Maintenance", Wrench],
   ["Trips", MapPin],
   ["Expenses", ReceiptText],
-  ["Analytics", TrendingUp],
   ["Schedule", CalendarDays],
 ];
 
@@ -51,7 +50,6 @@ const pages = {
   Maintenance: ["Service records", "Keep your vehicle healthy with repair history and mileage-based reminders."],
   Trips: ["Travel history", "Review completed journeys, recurring travel and time spent on the road."],
   Expenses: ["All expenses", "See every vehicle-related cost in one tidy ownership ledger."],
-  Analytics: ["Performance insights", "Understand fuel, distance and spending trends across your garage."],
   Schedule: ["Travel schedule", "Plan recurring journeys, renewals and service obligations."],
   Settings: ["Settings", "Tune the experience to match your vehicle life."],
 };
@@ -238,6 +236,7 @@ function CustomDatePicker({ name, defaultValue, onChange }) {
     return new Date();
   });
   const containerRef = useRef(null);
+  const touchStartRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     if (defaultValue) {
@@ -281,14 +280,24 @@ function CustomDatePicker({ name, defaultValue, onChange }) {
     days.push(new Date(year, month, i));
   }
 
-  const prevMonth = (e) => {
-    e.stopPropagation();
-    setViewDate(new Date(year, month - 1, 1));
+  const handleTouchStart = (e) => {
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
   };
 
-  const nextMonth = (e) => {
-    e.stopPropagation();
-    setViewDate(new Date(year, month + 1, 1));
+  const handleTouchEnd = (e) => {
+    if (!touchStartRef.current) return;
+    const touch = e.changedTouches[0];
+    const diffX = touch.clientX - touchStartRef.current.x;
+    const diffY = touch.clientY - touchStartRef.current.y;
+
+    if (Math.abs(diffX) > 40 && Math.abs(diffY) < 80) {
+      if (diffX > 0) {
+        setViewDate(new Date(year, month - 1, 1));
+      } else {
+        setViewDate(new Date(year, month + 1, 1));
+      }
+    }
   };
 
   const selectDay = (date) => {
@@ -313,9 +322,13 @@ function CustomDatePicker({ name, defaultValue, onChange }) {
         <CalendarDays size={16} className="arrow" style={{ color: "#e66b2e" }} />
       </button>
       {isOpen && (
-        <div className="calendar-dropdown" style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, left: "auto", width: "270px", padding: "10px", zIndex: 1000 }}>
-          <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-            <button type="button" className="btn ghost" style={{ padding: "4px 8px", border: "1px solid #e3dfd7", borderRadius: "6px" }} onClick={prevMonth}>&lt;</button>
+        <div 
+          className="calendar-dropdown" 
+          style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, left: "auto", width: "270px", padding: "10px", zIndex: 1000 }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          <header style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "10px" }}>
             <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
               <CustomCalendarHeaderSelect 
                 value={month} 
@@ -330,7 +343,6 @@ function CustomDatePicker({ name, defaultValue, onChange }) {
                 style={{ fontSize: "12px" }}
               />
             </div>
-            <button type="button" className="btn ghost" style={{ padding: "4px 8px", border: "1px solid #e3dfd7", borderRadius: "6px" }} onClick={nextMonth}>&gt;</button>
           </header>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "10px", fontWeight: "bold", color: "#849092", marginBottom: "4px" }}>
             <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
@@ -592,6 +604,33 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
     <section className="modal" role="dialog" aria-modal="true" aria-label="Quick add" onMouseDown={(e) => e.stopPropagation()}>
       <header><div><span className="eyebrow">Quick add</span><h2>Log a new record</h2></div><IconButton label="Close" onClick={close}><X size={18}/></IconButton></header>
       
+      <div className="record-tabs-container">
+        {type !== null && (
+          <div 
+            className="record-tabs-highlighter" 
+            style={{ 
+              transform: `translateX(${Object.keys(labels).indexOf(type) * 100}%)` 
+            }}
+          >
+            <div className="record-highlighter-inner" />
+          </div>
+        )}
+        {Object.entries(labels).map(([key, [label, Icon]]) => {
+          const isActive = type === key;
+          return (
+            <button 
+              key={key} 
+              type="button" 
+              className={`record-tab-btn ${isActive ? "active" : ""}`} 
+              onClick={() => setType(key)}
+            >
+              <Icon size={16}/>
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* AI Quick Fill Input */}
       {enableAi && (
         <div style={{ display: "flex", gap: "8px", marginTop: "14px", marginBottom: "6px", background: "#f5f3ef", padding: "8px", borderRadius: "8px" }} className="theme-toggle-bg">
@@ -615,10 +654,6 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
         </div>
       )}
       {enableAi && aiError && <div style={{ color: "#c74830", fontSize: "10px", fontWeight: "bold", marginBottom: "8px" }}>{aiError}</div>}
-
-      <div className="record-types">
-        {Object.entries(labels).map(([key, [label, Icon]]) => <button key={key} className={type === key ? "active" : ""} onClick={() => setType(key)}><Icon size={17}/>{label}</button>)}
-      </div>
       {type ? <form onSubmit={submit}>
         <div className="form-grid">
           <label>Date<CustomDatePicker name="date" defaultValue={date} onChange={setDate} /></label>
@@ -702,7 +737,7 @@ function VehicleModal({ close, addVehicle }) {
     <section className="modal" role="dialog" aria-modal="true" aria-label="Add vehicle" onMouseDown={(e) => e.stopPropagation()}>
       <header><div><span className="eyebrow">Your garage</span><h2>Add your first vehicle</h2></div><IconButton label="Close" onClick={close}><X size={18}/></IconButton></header>
       <form onSubmit={submit}>
-        <label>Vehicle name<input name="name" placeholder="My daily driver" required autoFocus /></label>
+        <label>Vehicle name<input name="name" placeholder="My daily driver" required /></label>
         <div className="form-grid"><label>Registration number<input name="registration" placeholder="KA 01 AB 1234" required /></label><label>Initial meter reading (km)<input name="initialOdometer" type="number" min="0" placeholder="24500" required /></label></div>
         <div className="form-grid"><label>Vehicle type<CustomSelect name="type" options={["Car", "Motorcycle", "Scooter", "Truck"]} /></label><label>Fuel type<CustomSelect name="fuel" options={["Petrol", "Diesel", "CNG", "LPG"]} /></label></div>
         <div className="form-grid">
@@ -735,7 +770,7 @@ function ScheduleModal({ close, onScheduleSaved, vehicle }) {
     <section className="modal" role="dialog" aria-modal="true" aria-label="Create schedule" onMouseDown={(e) => e.stopPropagation()}>
       <header><div><span className="eyebrow">Schedule</span><h2>Create recurring travel</h2></div><IconButton label="Close" onClick={close}><X size={18}/></IconButton></header>
       <form onSubmit={submit}>
-        <label>Schedule name<input name="name" defaultValue="Office commute" required autoFocus /></label>
+        <label>Schedule name<input name="name" defaultValue="Office commute" required /></label>
         <div className="form-grid"><label>Destination<input name="destination" defaultValue="Work" required /></label><label>Distance (km)<input name="distance" type="number" defaultValue="18" onWheel={(e) => e.target.blur()} /></label></div>
         <div className="form-grid"><label>Repeat<CustomSelect name="repeat" options={["Daily", "Weekly", "Monthly", "Yearly"]} /></label><label>Start date<CustomDatePicker name="startDate" defaultValue={toLocalDateStr()} /></label></div>
         <div className="form-grid"><label>Completion Time<input name="completionTime" type="time" defaultValue="18:00" onClick={(e) => e.target.showPicker()} /></label></div>
@@ -747,7 +782,7 @@ function ScheduleModal({ close, onScheduleSaved, vehicle }) {
   </div>;
 }
 
-function Sidebar({ active, setActive, open, setOpen, vehicle, vehicles = [], setVehicle, setVehicleModal }) {
+function Sidebar({ active, setActive, open, setOpen, vehicle, vehicles = [], setVehicle, setVehicleModal, username, setUsername, users, setUsers }) {
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const switcherRef = useRef(null);
 
@@ -770,20 +805,25 @@ function Sidebar({ active, setActive, open, setOpen, vehicle, vehicles = [], set
   };
 
   return <aside className={`sidebar ${open ? "open" : ""}`}>
-    <div className="brand"><div className="brand-mark"><Car size={20}/></div><strong>VehicleLog <em>Pro</em></strong><IconButton label="Close menu" className="menu-close" onClick={() => setOpen(false)}><X size={18}/></IconButton></div>
+    <div className="brand" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+      <img src="./logo.png" alt="FuelLog Logo" style={{ height: "40px", objectFit: "contain", borderRadius: "6px" }} />
+      <IconButton label="Close menu" className="menu-close" onClick={() => setOpen(false)}><X size={18}/></IconButton>
+    </div>
     
     <div className="profile-container" ref={switcherRef}>
       <div className="profile" onClick={() => setSwitcherOpen(!switcherOpen)} style={{ cursor: "pointer" }}>
-        <div className="vehicle-art"><span></span><Car size={24}/></div>
+        <div className="vehicle-art"><span></span><User size={20}/></div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <b style={{ display: "block", textOverflow: "ellipsis", overflow: "hidden" }}>{vehicle?.name || "Your garage"}</b>
-          <small style={{ display: "block", textOverflow: "ellipsis", overflow: "hidden" }}>{vehicle?.registration || "No vehicle added"}</small>
+          <b style={{ display: "block", textOverflow: "ellipsis", overflow: "hidden" }}>{username || "Driver"}</b>
+          <small style={{ display: "block", textOverflow: "ellipsis", overflow: "hidden" }}>{vehicle ? `${vehicle.name} (${vehicle.registration || "No registration"})` : "No vehicle active"}</small>
         </div>
         <ChevronDown size={16} className={`arrow ${switcherOpen ? "open" : ""}`} />
       </div>
 
       {switcherOpen && (
-        <ul className="vehicle-switcher-dropdown">
+        <ul className="vehicle-switcher-dropdown" style={{ maxHeight: "350px", overflowY: "auto" }}>
+          {/* VEHICLES SECTION */}
+          <li style={{ padding: "8px 10px 4px", fontSize: "9px", fontWeight: "bold", color: "#819495", textTransform: "uppercase", letterSpacing: "0.5px" }}>Vehicles</li>
           {vehicles.map((v) => {
             const isSelected = v.name === vehicle?.name;
             return (
@@ -806,9 +846,48 @@ function Sidebar({ active, setActive, open, setOpen, vehicle, vehicles = [], set
               setSwitcherOpen(false);
               setVehicleModal(true);
             }}
+            style={{ borderBottom: "1px solid #3b5155", paddingBottom: "10px", marginBottom: "8px" }}
           >
             <Plus size={14} />
             <span>Add vehicle</span>
+          </li>
+
+          {/* ACCOUNTS / DRIVERS SECTION */}
+          <li style={{ padding: "8px 10px 4px", fontSize: "9px", fontWeight: "bold", color: "#819495", textTransform: "uppercase", letterSpacing: "0.5px" }}>Accounts</li>
+          {users.map((u) => {
+            const isSelected = u === username;
+            return (
+              <li
+                key={u}
+                className={`custom-select-option ${isSelected ? "selected" : ""}`}
+                onClick={() => {
+                  localStorage.setItem("vehiclelog-v6-username", u);
+                  setUsername(u);
+                  setSwitcherOpen(false);
+                }}
+              >
+                <b>{u}</b>
+                {isSelected && <CheckCircle2 size={14} className="check-icon" />}
+              </li>
+            );
+          })}
+          <li
+            className="custom-select-option add-vehicle-btn"
+            onClick={() => {
+              setSwitcherOpen(false);
+              const newName = prompt("Enter new account/driver name:");
+              if (newName && newName.trim()) {
+                const trimmed = newName.trim();
+                const updatedUsers = [...new Set([...users, trimmed])];
+                localStorage.setItem("vehiclelog-v6-users", JSON.stringify(updatedUsers));
+                localStorage.setItem("vehiclelog-v6-username", trimmed);
+                setUsers(updatedUsers);
+                setUsername(trimmed);
+              }
+            }}
+          >
+            <Plus size={14} />
+            <span>Switch / Add account</span>
           </li>
         </ul>
       )}
@@ -922,16 +1001,17 @@ function Header({ active, setDark, dark, setModal, setMenu, vehicle, notificatio
           </div>
         )}
       </div>
-      {vehicle && <button className="btn primary" onClick={() => setModal(true)}><Plus size={17}/><span>Quick add</span></button>}
     </div>
   </header>;
 }
 
-function Welcome({ username, setUsername, addVehicle }) {
+function Welcome({ username, setUsername, users = [], setUsers = () => {}, addVehicle }) {
   if (!username) {
     return <section className="welcome">
-      <div className="welcome-mark"><Car size={32}/></div>
-      <span className="eyebrow">Welcome to VehicleLog Pro</span>
+      <div className="welcome-mark" style={{ background: "transparent", boxShadow: "none", width: "auto", height: "auto", display: "grid", placeItems: "center" }}>
+        <img src="./logo.png" alt="FuelLog Logo" style={{ height: "80px", objectFit: "contain" }} />
+      </div>
+      <span className="eyebrow">Welcome to FuelLog</span>
       <h2>Let's get to know you.</h2>
       <p>Please enter your name to personalize your dashboard. Your name stays locally on this device.</p>
       <form onSubmit={(e) => {
@@ -939,6 +1019,9 @@ function Welcome({ username, setUsername, addVehicle }) {
         const val = new FormData(e.currentTarget).get("username").trim();
         if (val) {
           localStorage.setItem("vehiclelog-v6-username", val);
+          const updatedUsers = [...new Set([...users, val])];
+          localStorage.setItem("vehiclelog-v6-users", JSON.stringify(updatedUsers));
+          setUsers(updatedUsers);
           setUsername(val);
         }
       }} style={{ display: "grid", gap: "12px", maxWidth: "320px", margin: "24px auto", width: "100%" }}>
@@ -960,8 +1043,10 @@ function Welcome({ username, setUsername, addVehicle }) {
   }
 
   return <section className="welcome">
-    <div className="welcome-mark"><Car size={32}/></div>
-    <span className="eyebrow">Welcome to VehicleLog Pro</span>
+    <div className="welcome-mark" style={{ background: "transparent", boxShadow: "none", width: "auto", height: "auto", display: "grid", placeItems: "center" }}>
+      <img src="./logo.png" alt="FuelLog Logo" style={{ height: "80px", objectFit: "contain" }} />
+    </div>
+    <span className="eyebrow">Welcome to FuelLog</span>
     <h2>Your garage starts here.</h2>
     <p>Add your first vehicle to begin tracking fuel, maintenance, trips, expenses, and ownership insights. Your data stays on this device.</p>
     <button className="btn primary" onClick={addVehicle}><Plus size={17}/>Add your first vehicle</button>
@@ -1100,7 +1185,6 @@ function Overview({
         {activities.length ? <div className="activity-list">{activities.slice(0,4).map((a, i) => <div className="activity" key={`${a.title}-${i}`}><div className={`activity-icon ${a.tone}`}><a.icon size={16}/></div><div><b>{a.title}</b><small>{a.meta}</small></div><aside><b>{a.amount}</b><small>{a.time}</small></aside></div>)}</div> : <EmptyWidget text="Your activity will appear here."/>}
       </article>
     </section>
-    <button className="floating-add" aria-label="Quick add record" onClick={() => setModal(true)}><Plus size={22}/></button>
   </>;
 }
 
@@ -1613,7 +1697,7 @@ function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh
   </div>;
 }
 
-function LogDetailModal({ active, record, close, onSave, onDelete }) {
+function LogDetailModal({ active, record, close, onSave, onDelete, activeVehicle, onSetVehicleActive }) {
   const table = tableForPage(active);
   const editableKeys = Object.keys(record).filter((key) => !["id", "createdAt", "updatedAt", "activity", "vehicle"].includes(key));
   const deleteLabel = active === "Schedule" ? "Delete schedule" : "Delete log";
@@ -1686,7 +1770,28 @@ function LogDetailModal({ active, record, close, onSave, onDelete }) {
         <form onSubmit={(event) => { event.preventDefault(); onSave(table, active === "Vehicles" ? record.name : record.id, Object.fromEntries(new FormData(event.currentTarget))); close(); }}>
           {editableKeys.map((key) => renderFieldInput(key))}
           {active === "Trips" && <small className="field-help">Changing trip distance updates live odometer, driven distance, and mileage on the dashboard.</small>}
-          <footer><button type="button" className="btn danger" onClick={() => onDelete(table, active === "Vehicles" ? record.name : record.id)}><Trash2 size={16}/>{deleteLabel}</button><button type="button" className="btn ghost" onClick={close}>Cancel</button><button className="btn primary"><CheckCircle2 size={17}/>Update log</button></footer>
+          <footer>
+            <button type="button" className="btn danger" onClick={() => onDelete(table, active === "Vehicles" ? record.name : record.id)}><Trash2 size={16}/>{deleteLabel}</button>
+            {active === "Vehicles" && onSetVehicleActive && (
+              record.name === activeVehicle?.name ? (
+                <button type="button" className="btn ghost" disabled style={{ opacity: 0.65, cursor: "not-allowed" }}>
+                  Active vehicle
+                </button>
+              ) : (
+                <button 
+                  type="button" 
+                  className="btn primary" 
+                  onClick={() => onSetVehicleActive(record)}
+                  style={{ background: "#3c8174", borderColor: "#3c8174", boxShadow: "none" }}
+                >
+                  <CheckCircle2 size={16}/>
+                  Set as Active
+                </button>
+              )
+            )}
+            <button type="button" className="btn ghost" onClick={close}>Cancel</button>
+            <button className="btn primary"><CheckCircle2 size={17}/>Update log</button>
+          </footer>
         </form>
       </section>
     </div>
@@ -1927,27 +2032,6 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
     {isSettings ? <SettingsPage allRecords={allRecords} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} onRefresh={onRefresh} vehicle={vehicle} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} stats={stats} username={username} setUsername={setUsername}/> : <>
       <div className="secondary-toolbar" style={{ display: "flex", gap: "8px", padding: "17px 0", alignItems: "center" }}>
         
-        {active === "Schedule" && (
-          <div style={{ display: "flex", gap: "4px", padding: "4px", borderRadius: "8px" }} className="theme-toggle-bg">
-            <button
-              type="button"
-              className={`btn ${scheduleView === "calendar" ? "primary" : "ghost"}`}
-              style={{ padding: "6px 12px", border: 0, borderRadius: "6px", boxShadow: "none" }}
-              onClick={() => setScheduleView("calendar")}
-            >
-              Calendar
-            </button>
-            <button
-              type="button"
-              className={`btn ${scheduleView === "list" ? "primary" : "ghost"}`}
-              style={{ padding: "6px 12px", border: 0, borderRadius: "6px", boxShadow: "none" }}
-              onClick={() => setScheduleView("list")}
-            >
-              List
-            </button>
-          </div>
-        )}
-
         {showSortAndView && (
           <>
             <div style={{ width: "160px" }}>
@@ -2064,7 +2148,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
           )}
 
           {canCreate && (
-            <button className="btn primary" onClick={() => setModal(schedule ? "schedule" : addTypeForPage(active))}>
+            <button className="btn primary toolbar-add-btn" onClick={() => setModal(schedule ? "schedule" : addTypeForPage(active))}>
               <Plus size={17}/>
               <span>{schedule ? "Create schedule" : "Add new"}</span>
             </button>
@@ -2185,7 +2269,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
           ) : (
             <>
               <div className="data-cards">{cards.map(({ record, fields: [a,b,c,d] }) => <article key={`${active}-${record.id || record.registration || record.name}`} role={canOpen ? "button" : "article"} tabIndex={canOpen ? "0" : undefined} aria-disabled={!canOpen} onClick={canOpen ? () => onOpenRecord(active, record) : undefined}><div className="data-icon">{active === "Schedule" ? <CalendarDays/> : active === "Vehicles" ? <Car/> : <Activity/>}</div><div><h3>{a}</h3><p>{b}</p></div><footer><span>{c}</span><span>{d}</span>{canOpen && <ArrowRight size={17}/>}</footer></article>)}</div>
-              {cards.length === 0 && <div className="empty-note"><Sparkles size={18}/><div><b>{schedule ? "No schedules yet" : "No records yet"}</b><p>{schedule ? "Create a recurring trip or reminder from this page." : "Your records stay on this device. Add new entries and they will appear here instantly."}</p></div>{schedule && <button className="btn primary" onClick={() => setModal("schedule")}><Plus size={16}/>Create schedule</button>}</div>}
+              {cards.length === 0 && <div className="empty-note"><Sparkles size={18}/><div><b>{schedule ? "No schedules yet" : "No records yet"}</b><p>{schedule ? "Create a recurring trip or reminder from this page." : "Your records stay on this device. Add new entries and they will appear here instantly."}</p></div>{schedule && <button className="btn primary empty-add-btn" onClick={() => setModal("schedule")}><Plus size={16}/>Create schedule</button>}</div>}
             </>
           )}
         </>
@@ -2309,12 +2393,33 @@ function ScheduleDetailsModal({ schedule, dateStr, isCompleted, isSkipped, close
 function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenScheduleDetails }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const touchStartRef = useRef({ x: 0, y: 0 });
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+
+  const handleTouchStart = (e) => {
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!touchStartRef.current) return;
+    const touch = e.changedTouches[0];
+    const diffX = touch.clientX - touchStartRef.current.x;
+    const diffY = touch.clientY - touchStartRef.current.y;
+
+    if (Math.abs(diffX) > 50 && Math.abs(diffY) < 100) {
+      if (diffX > 0) {
+        prevMonth();
+      } else {
+        nextMonth();
+      }
+    }
+  };
 
   const getDaysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
   const getFirstDayOfMonth = (y, m) => new Date(y, m, 1).getDay();
@@ -2342,7 +2447,12 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
 
   return (
     <div style={{ display: "grid", gap: "20px", marginTop: "10px" }}>
-      <div className="panel" style={{ padding: "20px" }}>
+      <div 
+        className="panel" 
+        style={{ padding: "20px" }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
           <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
             <CustomCalendarHeaderSelect 
@@ -2357,10 +2467,6 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
               options={Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - 15 + i).map((y) => ({ value: y, label: String(y) }))}
               style={{ fontSize: "16px" }}
             />
-          </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button type="button" className="btn ghost" onClick={prevMonth} style={{ padding: "6px 12px" }}>&lt; Prev</button>
-            <button type="button" className="btn ghost" onClick={nextMonth} style={{ padding: "6px 12px" }}>Next &gt;</button>
           </div>
         </header>
 
@@ -2485,6 +2591,15 @@ export default function App() {
 
   const [username, setUsername] = useState(() => {
     return localStorage.getItem("vehiclelog-v6-username") || "";
+  });
+
+  const [users, setUsers] = useState(() => {
+    const stored = localStorage.getItem("vehiclelog-v6-users");
+    const current = localStorage.getItem("vehiclelog-v6-username") || "";
+    if (stored) {
+      try { return JSON.parse(stored); } catch (e) {}
+    }
+    return current ? [current] : [];
   });
 
   const [enableAi, setEnableAi] = useState(() => {
@@ -2793,10 +2908,15 @@ export default function App() {
   const allActivities = useMemo(() => buildActivities(activeRecords), [activeRecords]);
 
   return <div className={`app ${dark ? "dark" : ""}`}>
-    <Sidebar active={current} setActive={setActive} open={menu} setOpen={setMenu} vehicle={vehicle} vehicles={vehicles} setVehicle={setVehicle} setVehicleModal={setVehicleModal}/>
-    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setScheduleDetail={setScheduleDetail} records={activeRecords} stats={stats} username={username} /><div className="content-body">{!vehicle ? <Welcome username={username} setUsername={setUsername} addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} username={username} setUsername={setUsername} />}</div></main>
+    <Sidebar active={current} setActive={setActive} open={menu} setOpen={setMenu} vehicle={vehicle} vehicles={vehicles} setVehicle={setVehicle} setVehicleModal={setVehicleModal} username={username} setUsername={setUsername} users={users} setUsers={setUsers}/>
+    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setScheduleDetail={setScheduleDetail} records={activeRecords} stats={stats} username={username} /><div className="content-body">{!vehicle ? <Welcome username={username} setUsername={setUsername} users={users} setUsers={setUsers} addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} username={username} setUsername={setUsername} />}</div></main>
     {modal && <Modal close={() => setModal(false)} setActivities={() => {}} vehicle={vehicle} fuelEntries={activeFuelEntries} onRecordSaved={addRecord} onVehicleUpdate={updateVehicle} initialType={modal === true ? null : modal} onScheduleSaved={addSchedule} enableAi={enableAi} enablePriceFetch={enablePriceFetch} stats={stats} />}
-    {detail && <LogDetailModal active={detail.page} record={detail.record} close={() => setDetail(null)} onSave={saveRecordUpdate} onDelete={deleteRecord}/>}
+    {detail && <LogDetailModal active={detail.page} record={detail.record} close={() => setDetail(null)} onSave={saveRecordUpdate} onDelete={deleteRecord} activeVehicle={vehicle} onSetVehicleActive={(v) => {
+      localStorage.setItem("vehiclelog-v6-active-vehicle", JSON.stringify(v));
+      localStorage.setItem("vehiclelog-v6-vehicle", JSON.stringify(v));
+      setVehicle(v);
+      setDetail(null);
+    }}/>}
     {vehicleModal && <VehicleModal close={() => setVehicleModal(false)} addVehicle={addVehicle}/>}
     {scheduleDetail && <ScheduleDetailsModal schedule={scheduleDetail.schedule} dateStr={scheduleDetail.dateStr} isCompleted={scheduleDetail.isCompleted} isSkipped={scheduleDetail.isSkipped} close={() => setScheduleDetail(null)} onAccept={handleLogTripFromSchedule} onSkip={handleSkipSchedule} />}
 
@@ -2818,5 +2938,73 @@ export default function App() {
         </section>
       </div>
     )}
+
+    {vehicle && (
+      <button 
+        className="floating-add" 
+        aria-label="Quick add record" 
+        onClick={() => {
+          const typeMap = {
+            "Fuel log": "fuel",
+            "Trips": "trips",
+            "Maintenance": "service",
+            "Expenses": "expenses",
+            "Schedule": "schedule"
+          };
+          setModal(typeMap[active] || true);
+        }}
+      >
+        <Plus size={22}/>
+      </button>
+    )}
+
+    {/* Floating Mobile Bottom Navigation Bar */}
+    <nav className="mobile-bottom-nav">
+      {["Overview", "Fuel log", "Schedule", "Settings", "Vehicles"].indexOf(active) !== -1 && (
+        <div 
+          className="mobile-bottom-nav-highlighter" 
+          style={{ 
+            transform: `translateX(${["Overview", "Fuel log", "Schedule", "Settings", "Vehicles"].indexOf(active) * 100}%)` 
+          }}
+        >
+          <div className="mobile-highlighter-inner" />
+        </div>
+      )}
+      <button 
+        className={`mobile-nav-item ${active === "Overview" ? "active" : ""}`}
+        onClick={() => setActive("Overview")}
+        aria-label="Home"
+      >
+        <LayoutDashboard size={22} />
+      </button>
+      <button 
+        className={`mobile-nav-item ${active === "Fuel log" ? "active" : ""}`}
+        onClick={() => setActive("Fuel log")}
+        aria-label="Fuel log"
+      >
+        <Fuel size={22} />
+      </button>
+      <button 
+        className={`mobile-nav-item ${active === "Schedule" ? "active" : ""}`}
+        onClick={() => setActive("Schedule")}
+        aria-label="Schedule"
+      >
+        <CalendarDays size={22} />
+      </button>
+      <button 
+        className={`mobile-nav-item ${active === "Settings" ? "active" : ""}`}
+        onClick={() => setActive("Settings")}
+        aria-label="Settings"
+      >
+        <Settings size={22} />
+      </button>
+      <button 
+        className={`mobile-nav-item ${active === "Vehicles" ? "active" : ""}`}
+        onClick={() => setActive("Vehicles")}
+        aria-label="Profile"
+      >
+        <User size={22} />
+      </button>
+    </nav>
   </div>;
 }
