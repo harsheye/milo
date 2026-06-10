@@ -822,7 +822,7 @@ function Sidebar({ active, setActive, open, setOpen, vehicle, vehicles = [], set
   </aside>;
 }
 
-function Header({ active, setDark, dark, setModal, setMenu, vehicle, notifications = [], setScheduleDetail, records, stats }) {
+function Header({ active, setDark, dark, setModal, setMenu, vehicle, notifications = [], setScheduleDetail, records, stats, username }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -866,12 +866,13 @@ function Header({ active, setDark, dark, setModal, setMenu, vehicle, notificatio
   }, [vehicle, records?.fuel, stats]);
 
   const displayDate = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "2-digit" }).replace(", ", " · ");
+  const displayName = username || "Driver";
 
   return <header className="topbar">
-    <div className="page-heading"><IconButton label="Open menu" className="mobile-menu" onClick={() => setMenu(true)}><Menu size={20}/></IconButton><div><span className="eyebrow">{displayDate}</span><h1>{active === "Overview" ? <>Good morning, <i>Harsh.</i></> : active}</h1></div></div>
+    <div className="page-heading"><IconButton label="Open menu" className="mobile-menu" onClick={() => setMenu(true)}><Menu size={20}/></IconButton><div><span className="eyebrow">{displayDate}</span><h1>{active === "Overview" ? <>Good morning, <i>{displayName}.</i></> : active}</h1></div></div>
     <div className="top-actions" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
       {fuelInfo && (
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#f5f3ef", padding: "6px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", border: "1px solid #e7e3dc" }} className="theme-toggle-bg" title={`Fuel Level: ${fuelInfo.level.toFixed(1)}L / ${fuelInfo.capacity}L`}>
+        <div className="fuel-pill" title={`Fuel Level: ${fuelInfo.level.toFixed(1)}L / ${fuelInfo.capacity}L`}>
           <Fuel size={13} style={{ color: fuelInfo.percentage < 20 ? "#c74830" : "#3c8174" }}/>
           <span>{fuelInfo.percentage}%</span>
         </div>
@@ -921,12 +922,43 @@ function Header({ active, setDark, dark, setModal, setMenu, vehicle, notificatio
           </div>
         )}
       </div>
-      {vehicle && <button className="btn primary" onClick={() => setModal(true)}><Plus size={17}/>Quick add</button>}
+      {vehicle && <button className="btn primary" onClick={() => setModal(true)}><Plus size={17}/><span>Quick add</span></button>}
     </div>
   </header>;
 }
 
-function Welcome({ addVehicle }) {
+function Welcome({ username, setUsername, addVehicle }) {
+  if (!username) {
+    return <section className="welcome">
+      <div className="welcome-mark"><Car size={32}/></div>
+      <span className="eyebrow">Welcome to VehicleLog Pro</span>
+      <h2>Let's get to know you.</h2>
+      <p>Please enter your name to personalize your dashboard. Your name stays locally on this device.</p>
+      <form onSubmit={(e) => {
+        e.preventDefault();
+        const val = new FormData(e.currentTarget).get("username").trim();
+        if (val) {
+          localStorage.setItem("vehiclelog-v6-username", val);
+          setUsername(val);
+        }
+      }} style={{ display: "grid", gap: "12px", maxWidth: "320px", margin: "24px auto", width: "100%" }}>
+        <input 
+          name="username" 
+          placeholder="Your name" 
+          required 
+          autoFocus
+          style={{ height: "42px", padding: "0 14px", border: "1px solid var(--border-color, #e3dfd7)", borderRadius: "8px", background: "var(--input-bg, white)", color: "var(--text-color, inherit)", fontSize: "14px", textAlign: "center" }}
+        />
+        <button className="btn primary" style={{ height: "42px", justifyContent: "center" }}>Continue</button>
+      </form>
+      <div className="welcome-grid">
+        <div><Fuel size={18}/><b>Track every refill</b><small>Understand mileage and fuel costs.</small></div>
+        <div><Wrench size={18}/><b>Stay ahead of service</b><small>Keep maintenance history tidy.</small></div>
+        <div><ShieldCheck size={18}/><b>Private by design</b><small>Local storage, no account required.</small></div>
+      </div>
+    </section>;
+  }
+
   return <section className="welcome">
     <div className="welcome-mark"><Car size={32}/></div>
     <span className="eyebrow">Welcome to VehicleLog Pro</span>
@@ -1191,7 +1223,7 @@ function tableForPage(active) {
   return "";
 }
 
-function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh, vehicle, enableAi, setEnableAi, enablePriceFetch, setEnablePriceFetch, geminiApiKey, setGeminiApiKey, fuelApiKey, setFuelApiKey, stats }) {
+function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh, vehicle, enableAi, setEnableAi, enablePriceFetch, setEnablePriceFetch, geminiApiKey, setGeminiApiKey, fuelApiKey, setFuelApiKey, stats, username, setUsername }) {
   const totalLogs = allRecords.fuel.length + allRecords.trips.length + allRecords.maintenance.length + allRecords.expenses.length + allRecords.schedules.length;
   const configured = Boolean(import.meta.env.VITE_FUEL_API_BASE_URL && (fuelApiKey || import.meta.env.VITE_FUEL_API_KEY));
   const rows = [
@@ -1392,6 +1424,30 @@ function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh
 
   return <div className="settings-grid">
     <article className="setting-card"><div><ShieldCheck size={18}/><span className="eyebrow">Privacy</span><h3>Local-first data</h3></div><p>Your vehicle, fuel, travel, expense, and schedule logs are stored locally in this browser. The fuel API is only called when you create a fuel refill.</p></article>
+    
+    <article className="setting-card">
+      <div>
+        <Settings size={18}/>
+        <span className="eyebrow">Profile</span>
+        <h3>Personalization</h3>
+      </div>
+      <p style={{ marginBottom: "12px" }}>Update your display name used across your personal dashboard.</p>
+      <div style={{ display: "flex", gap: "8px", flexDirection: "column" }}>
+        <label style={{ fontSize: "10px", fontWeight: "700", color: "#687679", display: "grid", gap: "4px" }}>
+          Your Name
+          <input
+            type="text"
+            placeholder="Enter your name"
+            value={username}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              localStorage.setItem("vehiclelog-v6-username", e.target.value);
+            }}
+            style={{ height: "39px", padding: "0 10px", border: "1px solid #e3dfd7", borderRadius: "8px", background: "white", fontSize: "12px", color: "inherit" }}
+          />
+        </label>
+      </div>
+    </article>
     
     <article className="setting-card">
       <div>
@@ -1637,7 +1693,7 @@ function LogDetailModal({ active, record, close, onSave, onDelete }) {
   );
 }
 
-function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehicles, setVehicles, setVehicle, allRecords, allFuelEntries, stats, skippedSchedules, onOpenScheduleDetails, onRefresh, enableAi, setEnableAi, enablePriceFetch, setEnablePriceFetch, geminiApiKey, setGeminiApiKey, fuelApiKey, setFuelApiKey }) {
+function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehicles, setVehicles, setVehicle, allRecords, allFuelEntries, stats, skippedSchedules, onOpenScheduleDetails, onRefresh, enableAi, setEnableAi, enablePriceFetch, setEnablePriceFetch, geminiApiKey, setGeminiApiKey, fuelApiKey, setFuelApiKey, username, setUsername }) {
   const [title, description] = pages[active] || ["Settings", "Tune the experience to match your vehicle life."];
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem(`vehiclelog-v6-viewmode-${active}`) || "list";
@@ -1868,7 +1924,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
   ];
 
   return <section className="secondary-page">
-    {isSettings ? <SettingsPage allRecords={allRecords} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} onRefresh={onRefresh} vehicle={vehicle} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} stats={stats}/> : <>
+    {isSettings ? <SettingsPage allRecords={allRecords} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} onRefresh={onRefresh} vehicle={vehicle} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} stats={stats} username={username} setUsername={setUsername}/> : <>
       <div className="secondary-toolbar" style={{ display: "flex", gap: "8px", padding: "17px 0", alignItems: "center" }}>
         
         {active === "Schedule" && (
@@ -2427,6 +2483,10 @@ export default function App() {
   const [dark, setDark] = useState(false);
   const [menu, setMenu] = useState(false);
 
+  const [username, setUsername] = useState(() => {
+    return localStorage.getItem("vehiclelog-v6-username") || "";
+  });
+
   const [enableAi, setEnableAi] = useState(() => {
     const val = localStorage.getItem("vehiclelog-v6-enable-ai");
     return val !== "false";
@@ -2734,7 +2794,7 @@ export default function App() {
 
   return <div className={`app ${dark ? "dark" : ""}`}>
     <Sidebar active={current} setActive={setActive} open={menu} setOpen={setMenu} vehicle={vehicle} vehicles={vehicles} setVehicle={setVehicle} setVehicleModal={setVehicleModal}/>
-    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setScheduleDetail={setScheduleDetail} records={activeRecords} stats={stats}/><div className="content-body">{!vehicle ? <Welcome addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} />}</div></main>
+    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setScheduleDetail={setScheduleDetail} records={activeRecords} stats={stats} username={username} /><div className="content-body">{!vehicle ? <Welcome username={username} setUsername={setUsername} addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} username={username} setUsername={setUsername} />}</div></main>
     {modal && <Modal close={() => setModal(false)} setActivities={() => {}} vehicle={vehicle} fuelEntries={activeFuelEntries} onRecordSaved={addRecord} onVehicleUpdate={updateVehicle} initialType={modal === true ? null : modal} onScheduleSaved={addSchedule} enableAi={enableAi} enablePriceFetch={enablePriceFetch} stats={stats} />}
     {detail && <LogDetailModal active={detail.page} record={detail.record} close={() => setDetail(null)} onSave={saveRecordUpdate} onDelete={deleteRecord}/>}
     {vehicleModal && <VehicleModal close={() => setVehicleModal(false)} addVehicle={addVehicle}/>}
