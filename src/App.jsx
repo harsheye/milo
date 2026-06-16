@@ -989,42 +989,6 @@ function Header({ active, setDark, dark, setModal, setMenu, vehicle, notificatio
 }
 
 function Welcome({ username, setUsername, users = [], setUsers = () => {}, addVehicle }) {
-  if (!username) {
-    return <section className="welcome">
-      <div className="welcome-mark" style={{ background: "transparent", boxShadow: "none", width: "auto", height: "auto", display: "grid", placeItems: "center" }}>
-        <img src="./logo.png" alt="FuelLog Logo" style={{ height: "80px", objectFit: "contain" }} />
-      </div>
-      <span className="eyebrow">Welcome to FuelLog</span>
-      <h2>Let's get to know you.</h2>
-      <p>Please enter your name to personalize your dashboard. Your name stays locally on this device.</p>
-      <form onSubmit={(e) => {
-        e.preventDefault();
-        const val = new FormData(e.currentTarget).get("username").trim();
-        if (val) {
-          localStorage.setItem("vehiclelog-v6-username", val);
-          const updatedUsers = [...new Set([...users, val])];
-          localStorage.setItem("vehiclelog-v6-users", JSON.stringify(updatedUsers));
-          setUsers(updatedUsers);
-          setUsername(val);
-        }
-      }} style={{ display: "grid", gap: "12px", maxWidth: "320px", margin: "24px auto", width: "100%" }}>
-        <input 
-          name="username" 
-          placeholder="Your name" 
-          required 
-          autoFocus
-          style={{ height: "42px", padding: "0 14px", border: "1px solid var(--border-color, #e3dfd7)", borderRadius: "8px", background: "var(--input-bg, white)", color: "var(--text-color, inherit)", fontSize: "14px", textAlign: "center" }}
-        />
-        <button className="btn primary" style={{ height: "42px", justifyContent: "center" }}>Continue</button>
-      </form>
-      <div className="welcome-grid">
-        <div><Fuel size={18}/><b>Track every refill</b><small>Understand mileage and fuel costs.</small></div>
-        <div><Wrench size={18}/><b>Stay ahead of service</b><small>Keep maintenance history tidy.</small></div>
-        <div><ShieldCheck size={18}/><b>Private by design</b><small>Local storage, no account required.</small></div>
-      </div>
-    </section>;
-  }
-
   return <section className="welcome">
     <div className="welcome-mark" style={{ background: "transparent", boxShadow: "none", width: "auto", height: "auto", display: "grid", placeItems: "center" }}>
       <img src="./logo.png" alt="FuelLog Logo" style={{ height: "80px", objectFit: "contain" }} />
@@ -1038,6 +1002,46 @@ function Welcome({ username, setUsername, users = [], setUsers = () => {}, addVe
       <div><Wrench size={18}/><b>Stay ahead of service</b><small>Keep maintenance history tidy.</small></div>
       <div><ShieldCheck size={18}/><b>Private by design</b><small>Local storage, no account required.</small></div>
     </div>
+
+    {/* Driver Name Entry Modal */}
+    {!username && (
+      <div className="modal-wrap" role="presentation">
+        <section className="modal" role="dialog" aria-modal="true" aria-label="Enter driver name" onMouseDown={(e) => e.stopPropagation()}>
+          <header>
+            <div>
+              <span className="eyebrow">Onboarding</span>
+              <h2>Welcome to FuelLog</h2>
+            </div>
+          </header>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            const val = new FormData(e.currentTarget).get("username").trim();
+            if (val) {
+              localStorage.setItem("vehiclelog-v6-username", val);
+              const updatedUsers = [...new Set([...users, val])];
+              localStorage.setItem("vehiclelog-v6-users", JSON.stringify(updatedUsers));
+              setUsers(updatedUsers);
+              setUsername(val);
+            }
+          }} style={{ display: "grid", gap: "12px", width: "100%" }}>
+            <label style={{ display: "grid", gap: "6px", fontSize: "10px", fontWeight: "700", color: "#687679" }}>
+              Please enter your name to personalize your dashboard:
+              <input 
+                name="username" 
+                placeholder="Your name" 
+                required 
+                autoFocus
+                style={{ width: "100%", height: "42px", padding: "0 14px", marginTop: "4px" }}
+              />
+            </label>
+            <small className="field-help" style={{ display: "block" }}>Your name and logs stay completely local on this device.</small>
+            <footer>
+              <button className="btn primary" style={{ width: "100%", height: "42px", justifyContent: "center" }}><Plus size={17}/>Continue</button>
+            </footer>
+          </form>
+        </section>
+      </div>
+    )}
   </section>;
 }
 
