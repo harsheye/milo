@@ -719,13 +719,14 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
   </div>;
 }
 
-function VehicleModal({ close, addVehicle }) {
+function VehicleModal({ close, addVehicle, username }) {
   function submit(e) {
     e.preventDefault();
     const entry = Object.fromEntries(new FormData(e.currentTarget));
     entry.tankCapacity = Number(entry.tankCapacity || 50);
     entry.currentFuelLevel = Number(entry.currentFuelLevel || 25);
     entry.currentFuelOdometer = Number(entry.initialOdometer || 0);
+    entry.driver = username;
 
     if (entry.currentFuelLevel > entry.tankCapacity) {
       alert("Current fuel level cannot exceed tank capacity!");
@@ -847,48 +848,9 @@ function Sidebar({ active, setActive, open, setOpen, vehicle, vehicles = [], set
               setSwitcherOpen(false);
               setVehicleModal(true);
             }}
-            style={{ borderBottom: "1px solid #3b5155", paddingBottom: "10px", marginBottom: "8px" }}
           >
             <Plus size={14} />
             <span>Add vehicle</span>
-          </li>
-
-          {/* ACCOUNTS / DRIVERS SECTION */}
-          <li style={{ padding: "8px 10px 4px", fontSize: "9px", fontWeight: "bold", color: "#819495", textTransform: "uppercase", letterSpacing: "0.5px" }}>Accounts</li>
-          {users.map((u) => {
-            const isSelected = u === username;
-            return (
-              <li
-                key={u}
-                className={`custom-select-option ${isSelected ? "selected" : ""}`}
-                onClick={() => {
-                  localStorage.setItem("vehiclelog-v6-username", u);
-                  setUsername(u);
-                  setSwitcherOpen(false);
-                }}
-              >
-                <b>{u}</b>
-                {isSelected && <CheckCircle2 size={14} className="check-icon" />}
-              </li>
-            );
-          })}
-          <li
-            className="custom-select-option add-vehicle-btn"
-            onClick={() => {
-              setSwitcherOpen(false);
-              const newName = prompt("Enter new account/driver name:");
-              if (newName && newName.trim()) {
-                const trimmed = newName.trim();
-                const updatedUsers = [...new Set([...users, trimmed])];
-                localStorage.setItem("vehiclelog-v6-users", JSON.stringify(updatedUsers));
-                localStorage.setItem("vehiclelog-v6-username", trimmed);
-                setUsers(updatedUsers);
-                setUsername(trimmed);
-              }
-            }}
-          >
-            <Plus size={14} />
-            <span>Switch / Add account</span>
           </li>
         </ul>
       )}
@@ -1700,7 +1662,14 @@ function SettingsPage({ allRecords, vehicles, setVehicles, setVehicle, onRefresh
 
 function LogDetailModal({ active, record, close, onSave, onDelete, activeVehicle, onSetVehicleActive }) {
   const table = tableForPage(active);
-  const editableKeys = Object.keys(record).filter((key) => !["id", "createdAt", "updatedAt", "activity", "vehicle"].includes(key));
+  const [selectedDays, setSelectedDays] = useState(() => {
+    if (record.weekdays) {
+      return record.weekdays.split(",").map(d => d.trim()).filter(Boolean);
+    }
+    return [];
+  });
+
+  const editableKeys = Object.keys(record).filter((key) => !["id", "createdAt", "updatedAt", "activity", "vehicle", "endDate"].includes(key));
   const deleteLabel = active === "Schedule" ? "Delete schedule" : "Delete log";
 
   const renderFieldInput = (key) => {
@@ -1751,6 +1720,41 @@ function LogDetailModal({ active, record, close, onSave, onDelete, activeVehicle
         <label key={key}>
           {labelName}
           <CustomSelect name={key} defaultValue={defaultValue} options={["Car", "Motorcycle", "Scooter", "Truck"]} />
+        </label>
+      );
+    }
+
+    if (key === "weekdays") {
+      const weekdaysList = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      return (
+        <div key={key} style={{ display: "grid", gap: "6px", margin: "8px 0" }}>
+          <label style={{ fontSize: "10px", fontWeight: "700", color: "#687679" }}>Active Days</label>
+          <div className="weekday-picker" aria-label="Choose weekdays">
+            {weekdaysList.map((day) => (
+              <button
+                key={day}
+                type="button"
+                className={selectedDays.includes(day) ? "active" : ""}
+                onClick={() => {
+                  setSelectedDays((prev) =>
+                    prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+                  );
+                }}
+              >
+                {day}
+              </button>
+            ))}
+          </div>
+          <input type="hidden" name="weekdays" value={selectedDays.join(",")} />
+        </div>
+      );
+    }
+
+    if (key === "completionTime") {
+      return (
+        <label key={key}>
+          {labelName}
+          <input name={key} type="time" defaultValue={defaultValue || "18:00"} onClick={(e) => e.target.showPicker()} />
         </label>
       );
     }
@@ -2384,6 +2388,12 @@ function isScheduleActiveOnDate(schedule, date) {
 
   if (d < start) return false;
 
+  if (schedule.endDate) {
+    const end = new Date(schedule.endDate);
+    end.setHours(0,0,0,0);
+    if (d > end) return false;
+  }
+
   const repeat = schedule.repeat;
   if (repeat === "Daily") {
     return true;
@@ -2403,7 +2413,8 @@ function isScheduleActiveOnDate(schedule, date) {
 function ScheduleDetailsModal({ schedule, dateStr, isCompleted, isSkipped, close, onAccept, onSkip, onEdit }) {
   const isToday = dateStr === toLocalDateStr();
   const timePassed = isTimePassed(schedule.completionTime);
-  const canAccept = isToday && timePassed && !isCompleted && !isSkipped;
+  const isEnded = schedule.endDate && new Date(schedule.endDate) < new Date(dateStr);
+  const canAccept = isToday && timePassed && !isCompleted && !isSkipped && !isEnded;
 
   // Format date nicely (e.g., "Tue, 16 Jun")
   const formattedDate = new Date(dateStr).toLocaleDateString("en-IN", {
@@ -2465,8 +2476,8 @@ function ScheduleDetailsModal({ schedule, dateStr, isCompleted, isSkipped, close
           width: "72px",
           height: "72px",
           borderRadius: "50%",
-          background: isCompleted ? "rgba(60, 129, 116, 0.12)" : isSkipped ? "rgba(230, 107, 46, 0.12)" : "rgba(36, 64, 71, 0.08)",
-          color: isCompleted ? "#3c8174" : isSkipped ? "#e66b2e" : "#244047",
+          background: isCompleted ? "rgba(60, 129, 116, 0.12)" : isSkipped ? "rgba(230, 107, 46, 0.12)" : isEnded ? "rgba(132, 144, 146, 0.12)" : "rgba(36, 64, 71, 0.08)",
+          color: isCompleted ? "#3c8174" : isSkipped ? "#e66b2e" : isEnded ? "#849092" : "#244047",
           display: "grid",
           placeItems: "center",
           margin: "0 auto 20px",
@@ -2514,10 +2525,10 @@ function ScheduleDetailsModal({ schedule, dateStr, isCompleted, isSkipped, close
 
         {/* Status indicator */}
         <div style={{ marginBottom: "32px" }}>
-          <span className={`connection ${isCompleted ? "online" : isSkipped ? "offline" : timePassed ? "offline" : "online"}`} style={{ display: "inline-flex", padding: "8px 16px", borderRadius: "20px", fontSize: "12px", border: "1px solid rgba(0,0,0,0.03)" }}>
+          <span className={`connection ${isCompleted ? "online" : isSkipped ? "offline" : isEnded ? "offline" : timePassed ? "offline" : "online"}`} style={{ display: "inline-flex", padding: "8px 16px", borderRadius: "20px", fontSize: "12px", border: "1px solid rgba(0,0,0,0.03)" }}>
             <i></i>
             <span style={{ fontWeight: "700" }}>
-              {isCompleted ? "Completed" : isSkipped ? "Skipped" : timePassed ? "Ready to Complete" : "Scheduled (Upcoming)"}
+              {isCompleted ? "Completed" : isSkipped ? "Skipped" : isEnded ? "Ended / Logged" : timePassed ? "Ready to Complete" : "Scheduled (Upcoming)"}
             </span>
           </span>
         </div>
@@ -2529,7 +2540,7 @@ function ScheduleDetailsModal({ schedule, dateStr, isCompleted, isSkipped, close
           <button
             type="button"
             className="btn"
-            disabled={isCompleted || isSkipped || !isToday}
+            disabled={isCompleted || isSkipped || !isToday || isEnded}
             onClick={() => { onSkip(schedule.id, dateStr); close(); }}
             style={{
               flex: 1.2,
@@ -2541,12 +2552,12 @@ function ScheduleDetailsModal({ schedule, dateStr, isCompleted, isSkipped, close
               alignItems: "center",
               justifyContent: "center",
               gap: "8px",
-              backgroundColor: (isCompleted || isSkipped || !isToday) ? "rgba(199, 72, 48, 0.02)" : "rgba(199, 72, 48, 0.08)",
+              backgroundColor: (isCompleted || isSkipped || !isToday || isEnded) ? "rgba(199, 72, 48, 0.02)" : "rgba(199, 72, 48, 0.08)",
               color: "#c74830",
               border: "1px solid rgba(199, 72, 48, 0.2)",
               cursor: "pointer",
               transition: "all 0.2s ease",
-              opacity: (isCompleted || isSkipped || !isToday) ? 0.4 : 1
+              opacity: (isCompleted || isSkipped || !isToday || isEnded) ? 0.4 : 1
             }}
           >
             <Clock3 size={16} />
@@ -2818,9 +2829,14 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
             const isSkippedToday = skippedSchedules[s.id]?.includes(todayStr);
             const isActiveToday = isScheduleActiveOnDate(s, todayStr);
             
+            const isEnded = s.endDate && new Date(s.endDate) < new Date(todayStr);
+            
             let statusText = "Inactive today";
             let statusClass = "connection offline";
-            if (isCompletedToday) {
+            if (isEnded) {
+              statusText = "Ended / Logged";
+              statusClass = "connection offline";
+            } else if (isCompletedToday) {
               statusText = "Completed Today";
               statusClass = "connection online";
             } else if (isSkippedToday) {
@@ -2942,6 +2958,27 @@ export default function App() {
   const [costPeriod, setCostPeriod] = useState("All time");
   const [allActivitiesModal, setAllActivitiesModal] = useState(false);
   const [notificationsModal, setNotificationsModal] = useState(false);
+
+  const userVehicles = useMemo(() => {
+    return vehicles.filter(v => !v.driver || v.driver === username);
+  }, [vehicles, username]);
+
+  useEffect(() => {
+    if (!username) return;
+    const activeDriverVehicles = vehicles.filter(v => !v.driver || v.driver === username);
+    const isValid = vehicle && activeDriverVehicles.some(v => v.name === vehicle.name);
+    if (!isValid) {
+      const nextActive = activeDriverVehicles[0] || null;
+      if (nextActive) {
+        localStorage.setItem("vehiclelog-v6-active-vehicle", JSON.stringify(nextActive));
+        localStorage.setItem("vehiclelog-v6-vehicle", JSON.stringify(nextActive));
+      } else {
+        localStorage.removeItem("vehiclelog-v6-active-vehicle");
+        localStorage.removeItem("vehiclelog-v6-vehicle");
+      }
+      setVehicle(nextActive);
+    }
+  }, [username, vehicles]);
 
   const refreshRecords = () => {
     Promise.all([getEntries("fuel"), getEntries("trips"), getEntries("maintenance"), getEntries("expenses"), getEntries("schedules")]).then(([fuel, trips, maintenance, expenses, schedules]) => {
@@ -3143,6 +3180,20 @@ export default function App() {
       setDetail(null);
       return;
     }
+    if (table === "schedules") {
+      const schedule = records.schedules.find(s => Number(s.id) === Number(id));
+      if (schedule) {
+        const yesterday = toLocalDateStr(new Date(Date.now() - 86400000));
+        const updated = { ...schedule, endDate: yesterday };
+        await updateEntry("schedules", Number(id), { endDate: yesterday });
+        setRecords((currentRecords) => ({
+          ...currentRecords,
+          schedules: currentRecords.schedules.map((s) => Number(s.id) === Number(id) ? updated : s)
+        }));
+        setDetail(null);
+        return;
+      }
+    }
     await deleteEntry(table, id);
     setRecords((currentRecords) => ({ ...currentRecords, [table]: currentRecords[table].filter((record) => Number(record.id) !== Number(id)) }));
     if (table === "fuel") setFuelEntries((currentEntries) => currentEntries.filter((record) => Number(record.id) !== Number(id)));
@@ -3191,8 +3242,8 @@ export default function App() {
   const allActivities = useMemo(() => buildActivities(activeRecords), [activeRecords]);
 
   return <div className={`app ${dark ? "dark" : ""}`}>
-    <Sidebar active={current} setActive={setActive} open={menu} setOpen={setMenu} vehicle={vehicle} vehicles={vehicles} setVehicle={setVehicle} setVehicleModal={setVehicleModal} username={username} setUsername={setUsername} users={users} setUsers={setUsers}/>
-    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setScheduleDetail={setScheduleDetail} records={activeRecords} stats={stats} username={username} /><div className="content-body">{!vehicle ? <Welcome username={username} setUsername={setUsername} users={users} setUsers={setUsers} addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={vehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} username={username} setUsername={setUsername} users={users} setUsers={setUsers} setVehicleModal={setVehicleModal} />}</div></main>
+    <Sidebar active={current} setActive={setActive} open={menu} setOpen={setMenu} vehicle={vehicle} vehicles={userVehicles} setVehicle={setVehicle} setVehicleModal={setVehicleModal} username={username} setUsername={setUsername} users={users} setUsers={setUsers}/>
+    <main className="content"><Header active={current} dark={dark} setDark={setDark} setModal={setModal} setMenu={setMenu} vehicle={vehicle} notifications={notifications} setScheduleDetail={setScheduleDetail} records={activeRecords} stats={stats} username={username} /><div className="content-body">{!vehicle ? <Welcome username={username} setUsername={setUsername} users={users} setUsers={setUsers} addVehicle={() => setVehicleModal(true)}/> : current === "Overview" ? <Overview setModal={setModal} activities={allActivities} vehicle={vehicle} stats={stats} records={activeRecords} timePeriod={timePeriod} setTimePeriod={setTimePeriod} costPeriod={costPeriod} setCostPeriod={setCostPeriod} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} skippedSchedules={skippedSchedules} onViewAllActivities={() => setAllActivitiesModal(true)} chartData={chartData} spendTrend={spendTrend} litersTrend={litersTrend} distanceTrend={distanceTrend} /> : <SecondaryPage active={current} setModal={setModal} records={activeRecords} vehicle={vehicle} vehicles={userVehicles} setVehicles={setVehicles} setVehicle={setVehicle} allRecords={records} allFuelEntries={fuelEntries} stats={stats} skippedSchedules={skippedSchedules} onOpenScheduleDetails={(schedule, dateStr, isCompleted, isSkipped) => setScheduleDetail({ schedule, dateStr, isCompleted, isSkipped })} onOpenRecord={(page, record) => setDetail({ page, record })} onRefresh={refreshRecords} enableAi={enableAi} setEnableAi={setEnableAi} enablePriceFetch={enablePriceFetch} setEnablePriceFetch={setEnablePriceFetch} geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey} fuelApiKey={fuelApiKey} setFuelApiKey={setFuelApiKey} username={username} setUsername={setUsername} users={users} setUsers={setUsers} setVehicleModal={setVehicleModal} />}</div></main>
     {modal && <Modal close={() => setModal(false)} setActivities={() => {}} vehicle={vehicle} fuelEntries={activeFuelEntries} onRecordSaved={addRecord} onVehicleUpdate={updateVehicle} initialType={modal === true ? null : modal} onScheduleSaved={addSchedule} enableAi={enableAi} enablePriceFetch={enablePriceFetch} stats={stats} />}
     {detail && <LogDetailModal active={detail.page} record={detail.record} close={() => setDetail(null)} onSave={saveRecordUpdate} onDelete={deleteRecord} activeVehicle={vehicle} onSetVehicleActive={(v) => {
       localStorage.setItem("vehiclelog-v6-active-vehicle", JSON.stringify(v));
@@ -3200,7 +3251,7 @@ export default function App() {
       setVehicle(v);
       setDetail(null);
     }}/>}
-    {vehicleModal && <VehicleModal close={() => setVehicleModal(false)} addVehicle={addVehicle}/>}
+    {vehicleModal && <VehicleModal close={() => setVehicleModal(false)} addVehicle={addVehicle} username={username}/>}
     {scheduleDetail && <ScheduleDetailsModal schedule={scheduleDetail.schedule} dateStr={scheduleDetail.dateStr} isCompleted={scheduleDetail.isCompleted} isSkipped={scheduleDetail.isSkipped} close={() => setScheduleDetail(null)} onAccept={handleLogTripFromSchedule} onSkip={handleSkipSchedule} onEdit={() => { setDetail({ page: "Schedule", record: scheduleDetail.schedule }); setScheduleDetail(null); }} />}
 
     {allActivitiesModal && (
