@@ -698,18 +698,20 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
           <div className="form-grid">
             <label>Completion Time<input name="completionTime" type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} onClick={(e) => e.target.showPicker()} /></label>
           </div>
-          <div className="weekday-picker" aria-label="Choose weekdays">
-            {weekdays.map((day) => (
-              <button 
-                key={day} 
-                type="button" 
-                className={scheduleDays.includes(day) ? "active" : ""} 
-                onClick={() => setScheduleDays((currentDays) => currentDays.includes(day) ? currentDays.filter((d) => d !== day) : [...currentDays, day])}
-              >
-                {day}
-              </button>
-            ))}
-          </div>
+          {scheduleRepeat !== "Daily" && (
+            <div className="weekday-picker" aria-label="Choose weekdays">
+              {weekdays.map((day) => (
+                <button 
+                  key={day} 
+                  type="button" 
+                  className={scheduleDays.includes(day) ? "active" : ""} 
+                  onClick={() => setScheduleDays((currentDays) => currentDays.includes(day) ? currentDays.filter((d) => d !== day) : [...currentDays, day])}
+                >
+                  {day}
+                </button>
+              ))}
+            </div>
+          )}
         </>}
 
         <label>Note<input name="note" value={type === "schedule" ? scheduleNotes : note} onChange={(e) => type === "schedule" ? setScheduleNotes(e.target.value) : setNote(e.target.value)} placeholder="Add a short note" /></label>
@@ -759,6 +761,7 @@ function VehicleModal({ close, addVehicle, username }) {
 
 function ScheduleModal({ close, onScheduleSaved, vehicle }) {
   const [days, setDays] = useState(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+  const [repeat, setRepeat] = useState("Weekly");
   async function submit(event) {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(event.currentTarget));
@@ -774,9 +777,11 @@ function ScheduleModal({ close, onScheduleSaved, vehicle }) {
       <form onSubmit={submit}>
         <label>Schedule name<input name="name" defaultValue="Office commute" required /></label>
         <div className="form-grid"><label>Destination<input name="destination" defaultValue="Work" required /></label><label>Distance (km)<input name="distance" type="number" defaultValue="18" onWheel={(e) => e.target.blur()} /></label></div>
-        <div className="form-grid"><label>Repeat<CustomSelect name="repeat" options={["Daily", "Weekly", "Monthly", "Yearly"]} /></label><label>Start date<CustomDatePicker name="startDate" defaultValue={toLocalDateStr()} /></label></div>
+        <div className="form-grid"><label>Repeat<CustomSelect name="repeat" value={repeat} onChange={setRepeat} options={["Daily", "Weekly", "Monthly", "Yearly"]} /></label><label>Start date<CustomDatePicker name="startDate" defaultValue={toLocalDateStr()} /></label></div>
         <div className="form-grid"><label>Completion Time<input name="completionTime" type="time" defaultValue="18:00" onClick={(e) => e.target.showPicker()} /></label></div>
-        <div className="weekday-picker" aria-label="Choose weekdays">{weekdays.map((day) => <button key={day} type="button" className={days.includes(day) ? "active" : ""} onClick={() => setDays((currentDays) => currentDays.includes(day) ? currentDays.filter((d) => d !== day) : [...currentDays, day])}>{day}</button>)}</div>
+        {repeat !== "Daily" && (
+          <div className="weekday-picker" aria-label="Choose weekdays">{weekdays.map((day) => <button key={day} type="button" className={days.includes(day) ? "active" : ""} onClick={() => setDays((currentDays) => currentDays.includes(day) ? currentDays.filter((d) => d !== day) : [...currentDays, day])}>{day}</button>)}</div>
+        )}
         <label>Notes<input name="notes" placeholder="Optional reminder notes" /></label>
         <footer><button type="button" className="btn ghost" onClick={close}>Cancel</button><button className="btn primary"><Plus size={17}/>Create schedule</button></footer>
       </form>
@@ -787,6 +792,7 @@ function ScheduleModal({ close, onScheduleSaved, vehicle }) {
 function Sidebar({ active, setActive, open, setOpen, vehicle, vehicles = [], setVehicle, setVehicleModal, username, setUsername, users, setUsers }) {
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const switcherRef = useRef(null);
+  const sidebarRef = useRef(null);
 
   useEffect(() => {
     if (!switcherOpen) return;
@@ -799,6 +805,20 @@ function Sidebar({ active, setActive, open, setOpen, vehicle, vehicles = [], set
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [switcherOpen]);
 
+  useEffect(() => {
+    if (!open) return;
+    function handleOutsideClick(e) {
+      if (sidebarRef.current && !sidebarRef.current.contains(e.target)) {
+        const isMenuBtn = e.target.closest(".mobile-menu");
+        if (!isMenuBtn) {
+          setOpen(false);
+        }
+      }
+    }
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [open, setOpen]);
+
   const selectVehicle = (v) => {
     localStorage.setItem("vehiclelog-v6-active-vehicle", JSON.stringify(v));
     localStorage.setItem("vehiclelog-v6-vehicle", JSON.stringify(v));
@@ -806,7 +826,7 @@ function Sidebar({ active, setActive, open, setOpen, vehicle, vehicles = [], set
     setSwitcherOpen(false);
   };
 
-  return <aside className={`sidebar ${open ? "open" : ""}`}>
+  return <aside ref={sidebarRef} className={`sidebar ${open ? "open" : ""}`}>
     <div className="brand" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
       <img src="./logo.png" alt="FuelLog Logo" style={{ height: "40px", objectFit: "contain", borderRadius: "6px" }} />
       <IconButton label="Close menu" className="menu-close" onClick={() => setOpen(false)}><X size={18}/></IconButton>
@@ -1668,6 +1688,7 @@ function LogDetailModal({ active, record, close, onSave, onDelete, activeVehicle
     }
     return [];
   });
+  const [repeatVal, setRepeatVal] = useState(record.repeat || "Weekly");
 
   const editableKeys = Object.keys(record).filter((key) => !["id", "createdAt", "updatedAt", "activity", "vehicle", "endDate"].includes(key));
   const deleteLabel = active === "Schedule" ? "Delete schedule" : "Delete log";
@@ -1701,7 +1722,7 @@ function LogDetailModal({ active, record, close, onSave, onDelete, activeVehicle
       return (
         <label key={key}>
           {labelName}
-          <CustomSelect name={key} defaultValue={defaultValue} options={["Daily", "Weekly", "Monthly", "Yearly"]} />
+          <CustomSelect name={key} value={repeatVal} onChange={setRepeatVal} options={["Daily", "Weekly", "Monthly", "Yearly"]} />
         </label>
       );
     }
@@ -1725,6 +1746,9 @@ function LogDetailModal({ active, record, close, onSave, onDelete, activeVehicle
     }
 
     if (key === "weekdays") {
+      if (repeatVal === "Daily") {
+        return <input type="hidden" key={key} name="weekdays" value="" />;
+      }
       const weekdaysList = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
       return (
         <div key={key} style={{ display: "grid", gap: "6px", margin: "8px 0" }}>
@@ -1826,6 +1850,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
   const [appliedMax, setAppliedMax] = useState("");
 
   const filterRef = useRef(null);
+  const [driverModalOpen, setDriverModalOpen] = useState(false);
 
   const handleReset = () => {
     setTempRange("all");
@@ -2188,17 +2213,7 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
               <button
                 type="button"
                 className="btn ghost"
-                onClick={() => {
-                  const newName = prompt("Enter new account/driver name:");
-                  if (newName && newName.trim()) {
-                    const trimmed = newName.trim();
-                    const updatedUsers = [...new Set([...users, trimmed])];
-                    localStorage.setItem("vehiclelog-v6-users", JSON.stringify(updatedUsers));
-                    localStorage.setItem("vehiclelog-v6-username", trimmed);
-                    setUsers(updatedUsers);
-                    setUsername(trimmed);
-                  }
-                }}
+                onClick={() => setDriverModalOpen(true)}
                 style={{ padding: "6px 12px", height: "auto", fontSize: "12px", borderStyle: "dashed" }}
               >
                 <Plus size={13} />
@@ -2366,6 +2381,47 @@ function SecondaryPage({ active, setModal, records, onOpenRecord, vehicle, vehic
         </>
       )}
     </>}
+    {driverModalOpen && (
+      <div className="modal-wrap" role="presentation" onMouseDown={() => setDriverModalOpen(false)}>
+        <section className="modal" role="dialog" aria-modal="true" aria-label="Add driver account" onMouseDown={(e) => e.stopPropagation()}>
+          <header>
+            <div>
+              <span className="eyebrow">Driver account</span>
+              <h2>Add new driver</h2>
+            </div>
+            <IconButton label="Close" onClick={() => setDriverModalOpen(false)}><X size={18}/></IconButton>
+          </header>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            const val = new FormData(e.currentTarget).get("driverName").trim();
+            if (val) {
+              const updatedUsers = [...new Set([...users, val])];
+              localStorage.setItem("vehiclelog-v6-users", JSON.stringify(updatedUsers));
+              localStorage.setItem("vehiclelog-v6-username", val);
+              setUsers(updatedUsers);
+              setUsername(val);
+              setDriverModalOpen(false);
+            }
+          }}>
+            <label>
+              Driver / Account Name
+              <input 
+                name="driverName" 
+                placeholder="Enter driver name" 
+                required 
+                autoFocus
+                style={{ width: "100%", height: "42px", padding: "0 14px", marginTop: "4px" }}
+              />
+            </label>
+            <small className="field-help" style={{ display: "block", marginTop: "6px" }}>Creating a new account isolates their tracked vehicles and logs on this device.</small>
+            <footer>
+              <button type="button" className="btn ghost" onClick={() => setDriverModalOpen(false)}>Cancel</button>
+              <button className="btn primary"><Plus size={17}/>Add driver</button>
+            </footer>
+          </form>
+        </section>
+      </div>
+    )}
   </section>;
 }
 
@@ -2443,33 +2499,6 @@ function ScheduleDetailsModal({ schedule, dateStr, isCompleted, isSkipped, close
           boxSizing: "border-box"
         }}
       >
-        {/* Top-right Edit button */}
-        <button
-          type="button"
-          onClick={onEdit}
-          style={{
-            position: "absolute",
-            top: "24px",
-            right: "24px",
-            background: "none",
-            border: "none",
-            color: "#e66b2e",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            fontSize: "12px",
-            fontWeight: "bold",
-            padding: "8px 12px",
-            borderRadius: "16px",
-            backgroundColor: "rgba(230, 107, 46, 0.08)",
-            transition: "all 0.2s ease"
-          }}
-          title="Edit trip details"
-        >
-          <Pencil size={14} />
-          <span>Edit</span>
-        </button>
 
         {/* Large icon with status-dependent background */}
         <div style={{
@@ -2619,6 +2648,32 @@ function ScheduleDetailsModal({ schedule, dateStr, isCompleted, isSkipped, close
           </button>
 
         </div>
+
+        {/* Edit button below actions */}
+        <button
+          type="button"
+          onClick={onEdit}
+          style={{
+            marginTop: "16px",
+            background: "none",
+            border: "none",
+            color: "#e66b2e",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            fontSize: "13px",
+            fontWeight: "bold",
+            padding: "8px 16px",
+            borderRadius: "16px",
+            backgroundColor: "rgba(230, 107, 46, 0.08)",
+            transition: "all 0.2s ease"
+          }}
+          title="Edit trip details"
+        >
+          <Pencil size={14} />
+          <span>Edit Details</span>
+        </button>
       </section>
     </div>
   );
@@ -2784,7 +2839,12 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
             }
 
             return (
-              <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", border: "1px solid #efebe5", borderRadius: "8px" }} className="activity">
+              <div 
+                key={s.id} 
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", border: "1px solid #efebe5", borderRadius: "8px", cursor: "pointer" }} 
+                className="activity"
+                onClick={() => onOpenScheduleDetails(s, selectedDateStr, isCompleted, isSkipped)}
+              >
                 <div>
                   <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "bold" }}>{s.name}</h4>
                   <small style={{ color: "#849092" }}>{s.destination} · {s.repeat} at {s.completionTime || "18:00"}</small>
@@ -2794,14 +2854,6 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
                     <i></i>
                     <span>{statusText}</span>
                   </span>
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    style={{ padding: "6px 12px", fontSize: "11px" }}
-                    onClick={() => onOpenScheduleDetails(s, selectedDateStr, isCompleted, isSkipped)}
-                  >
-                    View Details
-                  </button>
                 </div>
               </div>
             );
@@ -2849,7 +2901,12 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
             }
 
             return (
-              <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", border: "1px solid #efebe5", borderRadius: "8px" }} className="activity">
+              <div 
+                key={s.id} 
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", border: "1px solid #efebe5", borderRadius: "8px", cursor: "pointer" }} 
+                className="activity"
+                onClick={() => onOpenScheduleDetails(s, todayStr, isCompletedToday, isSkippedToday)}
+              >
                 <div>
                   <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "bold" }}>{s.name}</h4>
                   <small style={{ color: "#849092" }}>{s.destination || "No destination"} {s.distance ? `(${s.distance} km)` : ""} · {s.repeat} at {s.completionTime || "18:00"}</small>
@@ -2859,14 +2916,6 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
                     <i></i>
                     <span>{statusText}</span>
                   </span>
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    style={{ padding: "6px 12px", fontSize: "11px" }}
-                    onClick={() => onOpenScheduleDetails(s, todayStr, isCompletedToday, isSkippedToday)}
-                  >
-                    View / Edit
-                  </button>
                 </div>
               </div>
             );
@@ -3293,52 +3342,54 @@ export default function App() {
     )}
 
     {/* Floating Mobile Bottom Navigation Bar */}
-    <nav className="mobile-bottom-nav">
-      {["Overview", "Fuel log", "Schedule", "Settings", "Vehicles"].indexOf(active) !== -1 && (
-        <div 
-          className="mobile-bottom-nav-highlighter" 
-          style={{ 
-            transform: `translateX(${["Overview", "Fuel log", "Schedule", "Settings", "Vehicles"].indexOf(active) * 100}%)` 
-          }}
+    {!menu && (
+      <nav className="mobile-bottom-nav">
+        {["Overview", "Fuel log", "Schedule", "Settings", "Vehicles"].indexOf(active) !== -1 && (
+          <div 
+            className="mobile-bottom-nav-highlighter" 
+            style={{ 
+              transform: `translateX(${["Overview", "Fuel log", "Schedule", "Settings", "Vehicles"].indexOf(active) * 100}%)` 
+            }}
+          >
+            <div className="mobile-highlighter-inner" />
+          </div>
+        )}
+        <button 
+          className={`mobile-nav-item ${active === "Overview" ? "active" : ""}`}
+          onClick={() => setActive("Overview")}
+          aria-label="Home"
         >
-          <div className="mobile-highlighter-inner" />
-        </div>
-      )}
-      <button 
-        className={`mobile-nav-item ${active === "Overview" ? "active" : ""}`}
-        onClick={() => setActive("Overview")}
-        aria-label="Home"
-      >
-        <LayoutDashboard size={22} />
-      </button>
-      <button 
-        className={`mobile-nav-item ${active === "Fuel log" ? "active" : ""}`}
-        onClick={() => setActive("Fuel log")}
-        aria-label="Fuel log"
-      >
-        <Fuel size={22} />
-      </button>
-      <button 
-        className={`mobile-nav-item ${active === "Schedule" ? "active" : ""}`}
-        onClick={() => setActive("Schedule")}
-        aria-label="Schedule"
-      >
-        <CalendarDays size={22} />
-      </button>
-      <button 
-        className={`mobile-nav-item ${active === "Settings" ? "active" : ""}`}
-        onClick={() => setActive("Settings")}
-        aria-label="Settings"
-      >
-        <Settings size={22} />
-      </button>
-      <button 
-        className={`mobile-nav-item ${active === "Vehicles" ? "active" : ""}`}
-        onClick={() => setActive("Vehicles")}
-        aria-label="Profile"
-      >
-        <User size={22} />
-      </button>
-    </nav>
+          <LayoutDashboard size={22} />
+        </button>
+        <button 
+          className={`mobile-nav-item ${active === "Fuel log" ? "active" : ""}`}
+          onClick={() => setActive("Fuel log")}
+          aria-label="Fuel log"
+        >
+          <Fuel size={22} />
+        </button>
+        <button 
+          className={`mobile-nav-item ${active === "Schedule" ? "active" : ""}`}
+          onClick={() => setActive("Schedule")}
+          aria-label="Schedule"
+        >
+          <CalendarDays size={22} />
+        </button>
+        <button 
+          className={`mobile-nav-item ${active === "Settings" ? "active" : ""}`}
+          onClick={() => setActive("Settings")}
+          aria-label="Settings"
+        >
+          <Settings size={22} />
+        </button>
+        <button 
+          className={`mobile-nav-item ${active === "Vehicles" ? "active" : ""}`}
+          onClick={() => setActive("Vehicles")}
+          aria-label="Profile"
+        >
+          <User size={22} />
+        </button>
+      </nav>
+    )}
   </div>;
 }

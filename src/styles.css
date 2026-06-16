@@ -715,8 +715,8 @@ input[type=number] {
     display: flex;
     position: fixed;
     bottom: 54px;
-    left: 16px;
-    right: 16px;
+    left: 6px;
+    right: 6px;
     height: 54px;
     background: rgba(252, 251, 248, 0.95);
     backdrop-filter: blur(12px);
