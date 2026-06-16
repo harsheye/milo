@@ -30,6 +30,7 @@ fun MainScreen(
   AndroidView(
     factory = { webViewContext ->
         WebView(webViewContext).apply {
+          setBackgroundColor(android.graphics.Color.parseColor("#E2E1CF"))
           settings.javaScriptEnabled = true
           settings.domStorageEnabled = true
           settings.allowFileAccess = true

@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Milo" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Milo" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Window background color to match the beige theme -->
+        <item name="android:windowBackground">#E2E1CF</item>
+        
+        <!-- Splash Screen attributes for API 31+ -->
+        <item name="android:windowSplashScreenBackground">#E2E1CF</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+    </style>
 </resources>

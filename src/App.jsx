@@ -2802,6 +2802,66 @@ function CalendarScheduleView({ schedules, records, skippedSchedules, onOpenSche
           )}
         </div>
       </div>
+
+      {/* All Configured Schedules */}
+      <div className="panel" style={{ padding: "20px" }}>
+        <header className="panel-title">
+          <div>
+            <span className="eyebrow">All Schedules</span>
+            <h3>Configured Trips</h3>
+          </div>
+        </header>
+        <div style={{ display: "grid", gap: "12px", marginTop: "16px" }}>
+          {schedules.map(s => {
+            const todayStr = toLocalDateStr();
+            const isCompletedToday = records.trips.some(t => t.date === todayStr && t.note.includes(`Completed scheduled trip: ${s.name}`));
+            const isSkippedToday = skippedSchedules[s.id]?.includes(todayStr);
+            const isActiveToday = isScheduleActiveOnDate(s, todayStr);
+            
+            let statusText = "Inactive today";
+            let statusClass = "connection offline";
+            if (isCompletedToday) {
+              statusText = "Completed Today";
+              statusClass = "connection online";
+            } else if (isSkippedToday) {
+              statusText = "Skipped Today";
+              statusClass = "connection offline";
+            } else if (isActiveToday) {
+              const timePassed = isTimePassed(s.completionTime);
+              statusText = timePassed ? "Due today" : "Active today";
+              statusClass = "connection online";
+            }
+
+            return (
+              <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", border: "1px solid #efebe5", borderRadius: "8px" }} className="activity">
+                <div>
+                  <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "bold" }}>{s.name}</h4>
+                  <small style={{ color: "#849092" }}>{s.destination || "No destination"} {s.distance ? `(${s.distance} km)` : ""} · {s.repeat} at {s.completionTime || "18:00"}</small>
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <span className={statusClass}>
+                    <i></i>
+                    <span>{statusText}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    style={{ padding: "6px 12px", fontSize: "11px" }}
+                    onClick={() => onOpenScheduleDetails(s, todayStr, isCompletedToday, isSkippedToday)}
+                  >
+                    View / Edit
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          {schedules.length === 0 && (
+            <div style={{ textAlign: "center", padding: "20px", color: "#849092" }} className="widget-empty">
+              No scheduled trips configured yet.
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
