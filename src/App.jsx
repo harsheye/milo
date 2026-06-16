@@ -698,7 +698,7 @@ function Modal({ close, setActivities, vehicle, fuelEntries, onRecordSaved, onVe
           <div className="form-grid">
             <label>Completion Time<input name="completionTime" type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} onClick={(e) => e.target.showPicker()} /></label>
           </div>
-          {scheduleRepeat !== "Daily" && (
+          {(scheduleRepeat === "Daily" || scheduleRepeat === "Weekly") && (
             <div className="weekday-picker" aria-label="Choose weekdays">
               {weekdays.map((day) => (
                 <button 
@@ -779,7 +779,7 @@ function ScheduleModal({ close, onScheduleSaved, vehicle }) {
         <div className="form-grid"><label>Destination<input name="destination" defaultValue="Work" required /></label><label>Distance (km)<input name="distance" type="number" defaultValue="18" onWheel={(e) => e.target.blur()} /></label></div>
         <div className="form-grid"><label>Repeat<CustomSelect name="repeat" value={repeat} onChange={setRepeat} options={["Daily", "Weekly", "Monthly", "Yearly"]} /></label><label>Start date<CustomDatePicker name="startDate" defaultValue={toLocalDateStr()} /></label></div>
         <div className="form-grid"><label>Completion Time<input name="completionTime" type="time" defaultValue="18:00" onClick={(e) => e.target.showPicker()} /></label></div>
-        {repeat !== "Daily" && (
+        {(repeat === "Daily" || repeat === "Weekly") && (
           <div className="weekday-picker" aria-label="Choose weekdays">{weekdays.map((day) => <button key={day} type="button" className={days.includes(day) ? "active" : ""} onClick={() => setDays((currentDays) => currentDays.includes(day) ? currentDays.filter((d) => d !== day) : [...currentDays, day])}>{day}</button>)}</div>
         )}
         <label>Notes<input name="notes" placeholder="Optional reminder notes" /></label>
@@ -1746,7 +1746,7 @@ function LogDetailModal({ active, record, close, onSave, onDelete, activeVehicle
     }
 
     if (key === "weekdays") {
-      if (repeatVal === "Daily") {
+      if (repeatVal !== "Daily" && repeatVal !== "Weekly") {
         return <input type="hidden" key={key} name="weekdays" value="" />;
       }
       const weekdaysList = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -2452,13 +2452,21 @@ function isScheduleActiveOnDate(schedule, date) {
 
   const repeat = schedule.repeat;
   if (repeat === "Daily") {
-    return true;
+    if (!schedule.weekdays) return true;
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const currentDayName = dayNames[d.getDay()];
+    const activeDays = schedule.weekdays.split(",").map(day => day.trim()).filter(Boolean);
+    if (activeDays.length === 0) return true;
+    return activeDays.includes(currentDayName);
   }
   if (repeat === "Weekly") {
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const currentDayName = dayNames[d.getDay()];
     const activeDays = (schedule.weekdays || "").split(",");
     return activeDays.includes(currentDayName);
+  }
+  if (repeat === "Monthly") {
+    return d.getDate() === start.getDate();
   }
   if (repeat === "Yearly") {
     return d.getDate() === start.getDate() && d.getMonth() === start.getMonth();
