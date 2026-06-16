@@ -7,6 +7,6 @@
         
         <!-- Splash Screen attributes for API 31+ -->
         <item name="android:windowSplashScreenBackground">#E2E1CF</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
     </style>
 </resources>
