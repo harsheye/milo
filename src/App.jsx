@@ -5,6 +5,7 @@ import {
   Download, Droplets, Fuel, Gauge, Grid2X2, LayoutDashboard, List, MapPin, Menu,
   Moon, MoreHorizontal, Plus, ReceiptText, Search, Settings, ShieldCheck,
   Sparkles, Sun, Table, Trash2, TrendingUp, Upload, User, Wrench, X, Zap,
+  Pencil, XCircle,
 } from "lucide-react";
 import { db, deleteEntry, getEntries, getFuelEntries, saveEntry, updateEntry } from "./db";
 import { fetchDailyFuelPrice } from "./fuelPrice";
@@ -2393,84 +2394,220 @@ function isScheduleActiveOnDate(schedule, date) {
     const activeDays = (schedule.weekdays || "").split(",");
     return activeDays.includes(currentDayName);
   }
-  if (repeat === "Monthly") {
-    return d.getDate() === start.getDate();
-  }
   if (repeat === "Yearly") {
     return d.getDate() === start.getDate() && d.getMonth() === start.getMonth();
   }
   return false;
 }
 
-function ScheduleDetailsModal({ schedule, dateStr, isCompleted, isSkipped, close, onAccept, onSkip }) {
+function ScheduleDetailsModal({ schedule, dateStr, isCompleted, isSkipped, close, onAccept, onSkip, onEdit }) {
   const isToday = dateStr === toLocalDateStr();
   const timePassed = isTimePassed(schedule.completionTime);
   const canAccept = isToday && timePassed && !isCompleted && !isSkipped;
 
+  // Format date nicely (e.g., "Tue, 16 Jun")
+  const formattedDate = new Date(dateStr).toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short"
+  });
+
   return (
     <div className="modal-wrap" role="presentation" onMouseDown={close}>
-      <section className="modal" role="dialog" aria-modal="true" aria-label="Schedule Details" onMouseDown={(e) => e.stopPropagation()}>
-        <header>
+      <section 
+        className="modal" 
+        role="dialog" 
+        aria-modal="true" 
+        aria-label="Schedule Details" 
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{ 
+          textAlign: "center", 
+          padding: "40px 24px",
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100%",
+          boxSizing: "border-box"
+        }}
+      >
+        {/* Top-right Edit button */}
+        <button
+          type="button"
+          onClick={onEdit}
+          style={{
+            position: "absolute",
+            top: "24px",
+            right: "24px",
+            background: "none",
+            border: "none",
+            color: "#e66b2e",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            fontSize: "12px",
+            fontWeight: "bold",
+            padding: "8px 12px",
+            borderRadius: "16px",
+            backgroundColor: "rgba(230, 107, 46, 0.08)",
+            transition: "all 0.2s ease"
+          }}
+          title="Edit trip details"
+        >
+          <Pencil size={14} />
+          <span>Edit</span>
+        </button>
+
+        {/* Large icon with status-dependent background */}
+        <div style={{
+          width: "72px",
+          height: "72px",
+          borderRadius: "50%",
+          background: isCompleted ? "rgba(60, 129, 116, 0.12)" : isSkipped ? "rgba(230, 107, 46, 0.12)" : "rgba(36, 64, 71, 0.08)",
+          color: isCompleted ? "#3c8174" : isSkipped ? "#e66b2e" : "#244047",
+          display: "grid",
+          placeItems: "center",
+          margin: "0 auto 20px",
+          boxShadow: "0 8px 16px rgba(0,0,0,0.03)"
+        }}>
+          <CalendarDays size={32} />
+        </div>
+
+        <span className="eyebrow" style={{ display: "block", letterSpacing: "1.5px", marginBottom: "6px", fontSize: "10px", color: "#849092" }}>Scheduled Trip</span>
+        <h2 style={{ fontSize: "24px", margin: "0 0 8px 0", fontWeight: "800", color: "var(--text-color, #203036)", lineHeight: "1.2" }}>{schedule.name}</h2>
+        <span style={{ fontSize: "14px", color: "#849092", display: "block", marginBottom: "24px", fontWeight: "500" }}>{formattedDate}</span>
+
+        {/* Info Box */}
+        <div style={{
+          background: "var(--input-bg, #f5f3ef)",
+          borderRadius: "16px",
+          padding: "18px 20px",
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "16px",
+          textAlign: "left",
+          fontSize: "13px",
+          marginBottom: "24px",
+          border: "1px solid var(--border-color, #e7e3dc)",
+          width: "100%",
+          maxWidth: "380px"
+        }} className="theme-toggle-bg">
           <div>
-            <span className="eyebrow">Schedule Detail</span>
-            <h2>{schedule.name}</h2>
+            <span style={{ color: "#849092", display: "block", fontSize: "9px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>Destination</span>
+            <strong style={{ color: "var(--text-color, #203036)", fontSize: "14px", fontWeight: "700" }}>{schedule.destination || "Not specified"}</strong>
           </div>
-          <IconButton label="Close" onClick={close}><X size={18}/></IconButton>
-        </header>
-        <div style={{ display: "grid", gap: "16px", margin: "20px 0" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
-              <span className="eyebrow" style={{ display: "block", marginBottom: "4px" }}>Destination</span>
-              <strong style={{ fontSize: "14px" }}>{schedule.destination || "Not specified"}</strong>
-            </div>
-            <div>
-              <span className="eyebrow" style={{ display: "block", marginBottom: "4px" }}>Distance</span>
-              <strong style={{ fontSize: "14px" }}>{schedule.distance ? `${schedule.distance} km` : "Not specified"}</strong>
-            </div>
+          <div>
+            <span style={{ color: "#849092", display: "block", fontSize: "9px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>Distance</span>
+            <strong style={{ color: "var(--text-color, #203036)", fontSize: "14px", fontWeight: "700" }}>{schedule.distance ? `${schedule.distance} km` : "Not specified"}</strong>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
-              <span className="eyebrow" style={{ display: "block", marginBottom: "4px" }}>Frequency</span>
-              <strong style={{ fontSize: "14px" }}>{schedule.repeat}</strong>
-            </div>
-            <div>
-              <span className="eyebrow" style={{ display: "block", marginBottom: "4px" }}>Completion Time</span>
-              <strong style={{ fontSize: "14px" }}>{schedule.completionTime || "18:00"}</strong>
-            </div>
+          <div>
+            <span style={{ color: "#849092", display: "block", fontSize: "9px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>Target Time</span>
+            <strong style={{ color: "var(--text-color, #203036)", fontSize: "14px", fontWeight: "700" }}>{schedule.completionTime || "18:00"}</strong>
           </div>
-          {schedule.notes && (
-            <div>
-              <span className="eyebrow" style={{ display: "block", marginBottom: "4px" }}>Notes</span>
-              <p style={{ margin: 0, fontSize: "12px", color: "#647176" }}>{schedule.notes}</p>
-            </div>
-          )}
-          <div style={{ borderTop: "1px solid #efebe5", paddingTop: "12px" }}>
-            <span className="eyebrow" style={{ display: "block", marginBottom: "4px" }}>Status for {dateStr}</span>
-            <span className={`connection ${isCompleted ? "online" : isSkipped ? "offline" : timePassed ? "offline" : "online"}`} style={{ display: "inline-flex", width: "auto" }}>
-              <i></i>
-              <span>{isCompleted ? "Completed" : isSkipped ? "Skipped" : timePassed ? "Ready to Complete" : "Scheduled (Before Completion Time)"}</span>
-            </span>
+          <div>
+            <span style={{ color: "#849092", display: "block", fontSize: "9px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>Repeat Mode</span>
+            <strong style={{ color: "var(--text-color, #203036)", fontSize: "14px", fontWeight: "700" }}>{schedule.repeat}</strong>
           </div>
         </div>
-        <footer>
-          <button type="button" className="btn ghost" onClick={close}>Cancel</button>
-          {!isCompleted && !isSkipped && isToday && (
-            <>
-              <button type="button" className="btn danger" onClick={() => { onSkip(schedule.id, dateStr); close(); }}>
-                Skip Today
-              </button>
-              <button
-                type="button"
-                className="btn primary"
-                disabled={!canAccept}
-                onClick={() => { onAccept(schedule); close(); }}
-                title={!timePassed ? `Only available after completion time (${schedule.completionTime || "18:00"})` : ""}
-              >
-                Accept to Complete
-              </button>
-            </>
-          )}
-        </footer>
+
+        {/* Status indicator */}
+        <div style={{ marginBottom: "32px" }}>
+          <span className={`connection ${isCompleted ? "online" : isSkipped ? "offline" : timePassed ? "offline" : "online"}`} style={{ display: "inline-flex", padding: "8px 16px", borderRadius: "20px", fontSize: "12px", border: "1px solid rgba(0,0,0,0.03)" }}>
+            <i></i>
+            <span style={{ fontWeight: "700" }}>
+              {isCompleted ? "Completed" : isSkipped ? "Skipped" : timePassed ? "Ready to Complete" : "Scheduled (Upcoming)"}
+            </span>
+          </span>
+        </div>
+
+        {/* Buttons Centered in a Premium Layout */}
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "12px", width: "100%", maxWidth: "380px" }}>
+          
+          {/* SKIP TODAY BUTTON */}
+          <button
+            type="button"
+            className="btn"
+            disabled={isCompleted || isSkipped || !isToday}
+            onClick={() => { onSkip(schedule.id, dateStr); close(); }}
+            style={{
+              flex: 1.2,
+              height: "48px",
+              borderRadius: "24px",
+              fontSize: "13px",
+              fontWeight: "700",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              backgroundColor: (isCompleted || isSkipped || !isToday) ? "rgba(199, 72, 48, 0.02)" : "rgba(199, 72, 48, 0.08)",
+              color: "#c74830",
+              border: "1px solid rgba(199, 72, 48, 0.2)",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              opacity: (isCompleted || isSkipped || !isToday) ? 0.4 : 1
+            }}
+          >
+            <Clock3 size={16} />
+            <span>Skip Today</span>
+          </button>
+
+          {/* COMPLETE BUTTON */}
+          <button
+            type="button"
+            className="btn"
+            disabled={!canAccept}
+            onClick={() => { onAccept(schedule); close(); }}
+            title={!timePassed ? `Only available after completion time (${schedule.completionTime || "18:00"})` : ""}
+            style={{
+              flex: 1.5,
+              height: "48px",
+              borderRadius: "24px",
+              fontSize: "13px",
+              fontWeight: "700",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              backgroundColor: !canAccept ? "rgba(60, 129, 116, 0.4)" : "#3c8174",
+              color: "#ffffff",
+              border: "none",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              boxShadow: !canAccept ? "none" : "0 8px 20px rgba(60, 129, 116, 0.25)",
+              opacity: !canAccept ? 0.6 : 1
+            }}
+          >
+            <CheckCircle2 size={16} />
+            <span>Complete</span>
+          </button>
+
+          {/* CIRCULAR CLOSE CROSS BUTTON */}
+          <button
+            type="button"
+            className="btn"
+            onClick={close}
+            style={{
+              width: "48px",
+              height: "48px",
+              borderRadius: "50%",
+              padding: 0,
+              display: "grid",
+              placeItems: "center",
+              backgroundColor: "var(--input-bg, #f5f3ef)",
+              border: "1px solid var(--border-color, #e7e3dc)",
+              color: "var(--text-color, #647176)",
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+            aria-label="Close"
+            title="Close"
+          >
+            <X size={20} />
+          </button>
+
+        </div>
       </section>
     </div>
   );
@@ -3004,7 +3141,7 @@ export default function App() {
       setDetail(null);
     }}/>}
     {vehicleModal && <VehicleModal close={() => setVehicleModal(false)} addVehicle={addVehicle}/>}
-    {scheduleDetail && <ScheduleDetailsModal schedule={scheduleDetail.schedule} dateStr={scheduleDetail.dateStr} isCompleted={scheduleDetail.isCompleted} isSkipped={scheduleDetail.isSkipped} close={() => setScheduleDetail(null)} onAccept={handleLogTripFromSchedule} onSkip={handleSkipSchedule} />}
+    {scheduleDetail && <ScheduleDetailsModal schedule={scheduleDetail.schedule} dateStr={scheduleDetail.dateStr} isCompleted={scheduleDetail.isCompleted} isSkipped={scheduleDetail.isSkipped} close={() => setScheduleDetail(null)} onAccept={handleLogTripFromSchedule} onSkip={handleSkipSchedule} onEdit={() => { setDetail({ page: "Schedule", record: scheduleDetail.schedule }); setScheduleDetail(null); }} />}
 
     {allActivitiesModal && (
       <div className="modal-wrap" role="presentation" onMouseDown={() => setAllActivitiesModal(false)}>
